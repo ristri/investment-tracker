@@ -102,8 +102,35 @@ export async function parseEpfPdf(file: File | ArrayBuffer): Promise<ParsedEpfRe
     });
   }
 
+  // Extract Opening Balance
+  const obMatch = fullText.match(/OB\s+Int\.\s*Updated\s*upto\s*([0-9/.-]+)\s*([0-9,]+)\s+([0-9,]+)\s+([0-9,]+)/i);
+
+  // Extract Bottom Interest Credited ("Int. Updated upto <date> <employee_int> <employer_int> <pension_int>")
+  const intRegex = /(?:^|\n|[^\w])Int\.\s*Updated\s*upto\s*([0-9/.-]+)\s*([0-9,]+)\s+([0-9,]+)\s+([0-9,]+)/gi;
+  const allIntMatches = [...fullText.matchAll(intRegex)];
+
+  let employeeInterest = 0;
+  let employerInterest = 0;
+  let interestUpdatedDate = '';
+
+  if (allIntMatches.length > 1) {
+    const lastMatch = allIntMatches[allIntMatches.length - 1];
+    interestUpdatedDate = lastMatch[1].trim();
+    employeeInterest = parseFloat(lastMatch[2].replace(/,/g, '')) || 0;
+    employerInterest = parseFloat(lastMatch[3].replace(/,/g, '')) || 0;
+  } else if (allIntMatches.length === 1 && !obMatch) {
+    const singleMatch = allIntMatches[0];
+    interestUpdatedDate = singleMatch[1].trim();
+    employeeInterest = parseFloat(singleMatch[2].replace(/,/g, '')) || 0;
+    employerInterest = parseFloat(singleMatch[3].replace(/,/g, '')) || 0;
+  }
+
+  const totalInterest = employeeInterest + employerInterest;
   const totalEpf = employeeClosing + employerClosing;
-  const totalInvested = employeeClosing + employerClosing;
+  // Invested principal = total closing balance minus interest credited
+  const totalInvested = totalInterest > 0 ? Math.max(0, totalEpf - totalInterest) : totalEpf;
+  const pnl = totalInterest;
+  const pnlPercent = totalInvested > 0 ? (pnl / totalInvested) * 100 : 0;
   const displayName = establishmentName ? `EPFO (${establishmentName})` : `EPFO Member Passbook ${memberId}`;
 
   const holding: CreateHoldingInput = {
@@ -121,8 +148,8 @@ export async function parseEpfPdf(file: File | ArrayBuffer): Promise<ParsedEpfRe
     statement_value: totalEpf,
     live_price: totalEpf,
     live_value: totalEpf,
-    unrealized_pnl: 0,
-    unrealized_pnl_percent: 0,
+    unrealized_pnl: pnl,
+    unrealized_pnl_percent: pnlPercent,
     source: 'epf_passbook',
     statement_date: asOnDate || financialYear || getLocalTodayInputString(),
     metadata: {
@@ -132,6 +159,10 @@ export async function parseEpfPdf(file: File | ArrayBuffer): Promise<ParsedEpfRe
       employee_share: employeeClosing,
       employer_share: employerClosing,
       pension_share: pensionBalance,
+      employee_interest: employeeInterest,
+      employer_interest: employerInterest,
+      total_interest: totalInterest,
+      interest_updated_date: interestUpdatedDate,
       financial_year: financialYear,
       financial_years_covered: financialYear ? [financialYear] : [],
       monthly_transactions: transactions,

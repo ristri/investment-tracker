@@ -86,6 +86,10 @@ export interface HoldingMetadata {
   employee_share?: number;
   employer_share?: number;
   pension_share?: number;
+  employee_interest?: number;
+  employer_interest?: number;
+  total_interest?: number;
+  interest_updated_date?: string;
   financial_year?: string;
   financial_years_covered?: string[];
   monthly_transactions?: EpfMonthlyTransaction[];
