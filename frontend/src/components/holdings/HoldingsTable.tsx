@@ -636,19 +636,30 @@ export function HoldingsTable({
 
                   {/* EPFO Interest Credited Summary */}
                   {selectedHoldingInfo.metadata?.total_interest !== undefined && selectedHoldingInfo.metadata.total_interest > 0 && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-emerald-400 block">EPFO Interest Credited</span>
-                        <p className="text-sm font-bold text-emerald-300 font-mono mt-0.5">
-                          +{formatINR(selectedHoldingInfo.metadata.total_interest)}
-                        </p>
-                      </div>
-                      <div className="text-right text-[11px] text-zinc-400">
-                        <p>Emp: <span className="text-white font-mono">{formatINR(selectedHoldingInfo.metadata.employee_interest)}</span> • Empr: <span className="text-white font-mono">{formatINR(selectedHoldingInfo.metadata.employer_interest)}</span></p>
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-xl space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-emerald-400 block">Total EPFO Interest Credited</span>
+                          <p className="text-sm font-bold text-emerald-300 font-mono mt-0.5">
+                            +{formatINR(selectedHoldingInfo.metadata.total_interest)}
+                          </p>
+                        </div>
                         {selectedHoldingInfo.metadata.interest_updated_date && (
-                          <span className="text-[10px] text-zinc-400">Updated: {selectedHoldingInfo.metadata.interest_updated_date}</span>
+                          <span className="text-[10px] text-zinc-400">Latest Update: {selectedHoldingInfo.metadata.interest_updated_date}</span>
                         )}
                       </div>
+
+                      {/* Multi-Year Breakdown if available */}
+                      {selectedHoldingInfo.metadata?.yearly_interest && Object.keys(selectedHoldingInfo.metadata.yearly_interest).length > 0 && (
+                        <div className="pt-1 border-t border-emerald-500/20 flex flex-wrap gap-2 text-[10px]">
+                          {Object.entries(selectedHoldingInfo.metadata.yearly_interest).map(([fy, item]) => (
+                            <span key={fy} className="bg-zinc-950/80 px-2 py-0.5 rounded-lg border border-zinc-800 font-mono text-zinc-300">
+                              FY {fy}: <strong className="text-emerald-400">+{formatINR(item.total)}</strong>
+                              <span className="text-zinc-400 text-[9px] ml-1">({item.date || '31 Mar'})</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 

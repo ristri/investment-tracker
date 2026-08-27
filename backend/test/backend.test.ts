@@ -243,4 +243,57 @@ describe('Shared Investment Calculations', () => {
     expect(summary.totalGain).toBe(14500);
     expect(summary.macroBreakdown.debt.value).toBe(239500);
   });
+
+  it('accurately accumulates multi-year EPFO interest credits across passbooks without overriding previous years', () => {
+    // 2020-2021: Total Contributions = ₹9,400, Interest = ₹100 (Closing Balance = ₹9,500)
+    // 2021-2022: Total Contributions = ₹28,201, Interest = ₹1,816 (Closing Balance = ₹39,517)
+    // Combined Multi-Year Portfolio:
+    // Total Invested = ₹37,601 (9400 + 28201)
+    // All-time Interest Credited = ₹1,916 (100 + 1816)
+    // Current Live Value = ₹39,517 (37601 + 1916)
+    const multiYearEpf: Holding = {
+      id: 7,
+      user_id: 1,
+      asset_class: 'epf',
+      name: 'EPFO (BILLIONBRAINS GARAGE VENTURES LIMITED)',
+      institution: 'BILLIONBRAINS GARAGE VENTURES LIMITED',
+      quantity: 1,
+      avg_buy_price: 37601,
+      invested_amount: 37601,
+      statement_price: 39517,
+      statement_value: 39517,
+      live_price: 39517,
+      live_value: 39517,
+      unrealized_pnl: 1916,
+      unrealized_pnl_percent: (1916 / 37601) * 100,
+      source: 'epf_passbook',
+      created_at: '2026-08-27',
+      updated_at: '2026-08-27',
+      metadata: {
+        uan: '101619658635',
+        member_id: 'PYBOM17419810000010286',
+        establishment_name: 'BILLIONBRAINS GARAGE VENTURES LIMITED',
+        employee_share: 30268,
+        employer_share: 9249,
+        pension_share: 20000,
+        total_interest: 1916,
+        yearly_interest: {
+          '2020-2021': { employee: 77, employer: 23, total: 100, date: '31/03/2021' },
+          '2021-2022': { employee: 1391, employer: 425, total: 1816, date: '31/03/2022' },
+        },
+        financial_years_covered: ['2020-2021', '2021-2022'],
+      },
+    };
+
+    const { currentValue, pnl, pnlPercent } = getHoldingLiveValue(multiYearEpf);
+    expect(currentValue).toBe(39517);
+    expect(pnl).toBe(1916);
+    expect(pnlPercent).toBeCloseTo(5.095, 2);
+
+    const summary = computePortfolioSummary([multiYearEpf]);
+    expect(summary.totalNetWorth).toBe(39517);
+    expect(summary.totalInvested).toBe(37601);
+    expect(summary.totalGain).toBe(1916);
+    expect(summary.macroBreakdown.debt.value).toBe(39517);
+  });
 });

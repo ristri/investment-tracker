@@ -163,6 +163,14 @@ export async function parseEpfPdf(file: File | ArrayBuffer): Promise<ParsedEpfRe
       employer_interest: employerInterest,
       total_interest: totalInterest,
       interest_updated_date: interestUpdatedDate,
+      yearly_interest: financialYear ? {
+        [financialYear]: {
+          employee: employeeInterest,
+          employer: employerInterest,
+          total: totalInterest,
+          date: interestUpdatedDate,
+        }
+      } : undefined,
       financial_year: financialYear,
       financial_years_covered: financialYear ? [financialYear] : [],
       monthly_transactions: transactions,

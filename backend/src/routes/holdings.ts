@@ -411,26 +411,50 @@ holdings.post('/batch-import', async (c) => {
         const newYears = newMeta.financial_years_covered || (newMeta.financial_year ? [newMeta.financial_year] : []);
         const mergedYears = Array.from(new Set([...oldYears, ...newYears])).filter(Boolean);
 
+        // Merge yearly interest history
+        const mergedYearlyInterest: Record<string, { employee: number; employer: number; total: number; date?: string }> = {
+          ...(existingMeta.yearly_interest || {}),
+          ...(newMeta.yearly_interest || {}),
+        };
+
+        // If previous single-year record existed without yearly_interest dictionary
+        if (existingMeta.total_interest && existingMeta.financial_year && !mergedYearlyInterest[existingMeta.financial_year]) {
+          mergedYearlyInterest[existingMeta.financial_year] = {
+            employee: existingMeta.employee_interest ?? 0,
+            employer: existingMeta.employer_interest ?? 0,
+            total: existingMeta.total_interest,
+            date: existingMeta.interest_updated_date,
+          };
+        }
+
+        // Sum cumulative interest across all financial years
+        const allTimeInterest = Object.values(mergedYearlyInterest).reduce((sum: number, item: any) => sum + (item.total || 0), 0);
+
         // Determine if incoming passbook is newer
         const oldDate = existingEpf.statement_date || '';
         const newDate = body.statement_date || h.statement_date || '';
         const isNewerPassbook = newDate >= oldDate || statementValue >= existingEpf.statement_value;
+
+        const finalStatementVal = isNewerPassbook ? statementValue : existingEpf.statement_value;
+        const finalInvested = allTimeInterest > 0 ? Math.max(0, finalStatementVal - allTimeInterest) : (isNewerPassbook ? investedAmount : existingEpf.invested_amount);
+        const finalPnl = allTimeInterest > 0 ? allTimeInterest : (finalStatementVal - finalInvested);
+        const finalPnlPct = finalInvested > 0 ? (finalPnl / finalInvested) * 100 : 0;
+        const finalDate = isNewerPassbook ? (newDate || oldDate) : oldDate;
 
         const mergedMeta = {
           ...existingMeta,
           ...newMeta,
           financial_years_covered: mergedYears,
           monthly_transactions: mergedTransactions,
+          yearly_interest: mergedYearlyInterest,
+          total_interest: allTimeInterest > 0 ? allTimeInterest : (newMeta.total_interest || existingMeta.total_interest),
+          employee_interest: isNewerPassbook ? newMeta.employee_interest ?? existingMeta.employee_interest : existingMeta.employee_interest,
+          employer_interest: isNewerPassbook ? newMeta.employer_interest ?? existingMeta.employer_interest : existingMeta.employer_interest,
+          interest_updated_date: isNewerPassbook ? newMeta.interest_updated_date ?? existingMeta.interest_updated_date : existingMeta.interest_updated_date,
           employee_share: isNewerPassbook ? newMeta.employee_share ?? existingMeta.employee_share : existingMeta.employee_share,
           employer_share: isNewerPassbook ? newMeta.employer_share ?? existingMeta.employer_share : existingMeta.employer_share,
           pension_share: isNewerPassbook ? newMeta.pension_share ?? existingMeta.pension_share : existingMeta.pension_share,
         };
-
-        const finalStatementVal = isNewerPassbook ? statementValue : existingEpf.statement_value;
-        const finalInvested = isNewerPassbook ? investedAmount : existingEpf.invested_amount;
-        const finalPnl = finalStatementVal - finalInvested;
-        const finalPnlPct = finalInvested > 0 ? (finalPnl / finalInvested) * 100 : 0;
-        const finalDate = isNewerPassbook ? (newDate || oldDate) : oldDate;
 
         await db
           .prepare(

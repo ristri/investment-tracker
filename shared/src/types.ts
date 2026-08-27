@@ -90,6 +90,7 @@ export interface HoldingMetadata {
   employer_interest?: number;
   total_interest?: number;
   interest_updated_date?: string;
+  yearly_interest?: Record<string, { employee: number; employer: number; total: number; date?: string }>;
   financial_year?: string;
   financial_years_covered?: string[];
   monthly_transactions?: EpfMonthlyTransaction[];
