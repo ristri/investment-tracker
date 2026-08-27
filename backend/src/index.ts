@@ -30,7 +30,8 @@ app.use('*', async (c, next) => {
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok', app: 'investment-tracker', time: new Date().toISOString() }));
 
-// Public auth routes
+// Auth routes
+app.use('/api/v1/auth/me', authMiddleware);
 app.route('/api/v1/auth', authRoutes);
 
 // Protected routes with auth middleware

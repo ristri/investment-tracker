@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { sign } from 'hono/jwt';
 import * as bcrypt from 'bcryptjs';
 import { Env, User, JWTPayload } from '@investment-tracker/shared';
+import { authMiddleware } from '../middleware/auth';
 
 const auth = new Hono<{ Bindings: Env; Variables: { jwtPayload: JWTPayload } }>();
 
@@ -48,6 +49,7 @@ auth.post('/login', async (c) => {
   }, 200);
 });
 
+auth.use('/me', authMiddleware);
 auth.get('/me', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload || !payload.userId) {
