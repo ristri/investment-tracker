@@ -103,6 +103,7 @@ export async function parseEpfPdf(file: File | ArrayBuffer): Promise<ParsedEpfRe
   }
 
   const totalEpf = employeeClosing + employerClosing;
+  const totalInvested = employeeClosing + employerClosing;
   const displayName = establishmentName ? `EPFO (${establishmentName})` : `EPFO Member Passbook ${memberId}`;
 
   const holding: CreateHoldingInput = {
@@ -114,14 +115,14 @@ export async function parseEpfPdf(file: File | ArrayBuffer): Promise<ParsedEpfRe
     category: 'Retirement',
     sub_category: 'Provident Fund',
     quantity: 1,
-    avg_buy_price: employeeClosing,
-    invested_amount: employeeClosing,
+    avg_buy_price: totalInvested,
+    invested_amount: totalInvested,
     statement_price: totalEpf,
     statement_value: totalEpf,
     live_price: totalEpf,
     live_value: totalEpf,
-    unrealized_pnl: employerClosing,
-    unrealized_pnl_percent: employeeClosing > 0 ? (employerClosing / employeeClosing) * 100 : 0,
+    unrealized_pnl: 0,
+    unrealized_pnl_percent: 0,
     source: 'epf_passbook',
     statement_date: asOnDate || financialYear || getLocalTodayInputString(),
     metadata: {
