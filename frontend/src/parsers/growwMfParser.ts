@@ -72,7 +72,8 @@ export async function parseGrowwMfExcel(file: File | ArrayBuffer): Promise<Parse
     if (!row || !row[schemeIdx]) continue;
 
     const schemeName = String(row[schemeIdx]).trim();
-    if (!schemeName || schemeName.toLowerCase().includes('total')) continue;
+    const lower = schemeName.toLowerCase();
+    if (!schemeName || lower === 'total' || lower === 'grand total' || lower === 'summary' || lower.startsWith('total holdings') || lower.startsWith('total investments')) continue;
 
     const amc = amcIdx !== -1 && row[amcIdx] ? String(row[amcIdx]).trim() : undefined;
     const category = catIdx !== -1 && row[catIdx] ? String(row[catIdx]).trim() : undefined;
