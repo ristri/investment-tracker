@@ -1,0 +1,41 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "deploy": "npx wrangler pages deploy dist --project-name=investment-tracker-frontend"
+  },
+  "dependencies": {
+    "@investment-tracker/shared": "*",
+    "@tanstack/query-sync-storage-persister": "^5.95.2",
+    "@tanstack/react-query": "^5.95.2",
+    "@tanstack/react-query-persist-client": "^5.95.2",
+    "@tanstack/react-router": "^1.168.4",
+    "axios": "^1.13.6",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^1.7.0",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "3.4",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1"
+  }
+}

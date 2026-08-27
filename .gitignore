@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.dev.vars
+.wrangler/
+.tanstack/
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+.DS_Store
+.temp_*.sql
+coverage/
+*.xlsx
+*.xls
+*.pdf
+*.csv

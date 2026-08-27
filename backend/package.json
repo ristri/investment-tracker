@@ -1,0 +1,27 @@
+{
+  "name": "backend",
+  "type": "module",
+  "scripts": {
+    "dev": "node ./scripts/ensure-dev-admin.mjs && wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "user:create": "node ./create-user.js",
+    "user:delete": "node ./delete-user.js",
+    "user:hash": "node ./hash-password.js"
+  },
+  "dependencies": {
+    "@investment-tracker/shared": "*",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
+    "hono": "^4.12.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@types/node": "^24.6.0",
+    "better-sqlite3": "^11.8.1",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.7",
+    "wrangler": "^4.4.0"
+  }
+}

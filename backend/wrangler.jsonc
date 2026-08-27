@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "investment-tracker-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-26",
+  "d1_databases": [
+    {
+      "binding": "investment_tracker_db",
+      "database_name": "investment-tracker-db",
+      "database_id": "b428a89a-300a-4b19-988f-7a2d94ba4823"
+    }
+  ]
+}

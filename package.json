@@ -1,0 +1,21 @@
+{
+  "name": "investment-tracker",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=shared && npm run build --workspace=frontend",
+    "test": "npm run test --workspace=backend",
+    "deploy:backend": "npm run deploy --workspace=backend",
+    "deploy:frontend": "npm run deploy --workspace=frontend",
+    "deploy": "npm run build && npm run deploy:backend && npm run deploy:frontend",
+    "user:create": "npm run user:create --workspace=backend --",
+    "user:delete": "npm run user:delete --workspace=backend --",
+    "user:hash": "npm run user:hash --workspace=backend --"
+  }
+}
