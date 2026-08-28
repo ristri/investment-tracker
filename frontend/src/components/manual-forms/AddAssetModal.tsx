@@ -184,6 +184,8 @@ export function AddAssetModal({ isOpen, onClose }: AddAssetModalProps) {
           nse_symbol: selectedSgbSymbol !== 'custom' ? selectedSgbSymbol : undefined,
           issue_price_per_gram: price,
           live_sgb_price: liveP,
+          price_updated_at: new Date().toISOString(),
+          price_source: 'NSE India',
           coupon_rate: 2.5,
           bank_name: sgbBank,
           issue_date: sgbDate,

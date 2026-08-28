@@ -7,6 +7,7 @@ import {
   formatPercent,
   isMaturedFD,
   getHoldingLiveValue,
+  getHoldingPriceUpdateInfo,
   formatLocalDate,
 } from '@investment-tracker/shared';
 import {
@@ -24,6 +25,8 @@ import {
   PieChart,
   Info,
   BookOpen,
+  Clock,
+  Activity,
 } from 'lucide-react';
 import { PpfManagerModal } from './PpfManagerModal';
 
@@ -195,6 +198,7 @@ export function HoldingsTable({
         ) : (
           filteredHoldings.map((h) => {
             const { currentValue: currentVal, pnl, pnlPercent: pnlPct, isMatured } = getHoldingLiveValue(h);
+            const priceInfo = getHoldingPriceUpdateInfo(h);
             const isProfit = pnl >= 0;
             const Icon = ASSET_ICONS[h.asset_class] || TrendingUp;
             const badge = ASSET_BADGES[h.asset_class] || { label: h.asset_class, bg: 'bg-zinc-800', text: 'text-zinc-300', border: 'border-zinc-700' };
@@ -213,7 +217,7 @@ export function HoldingsTable({
                     </div>
                     <div className="min-w-0">
                       <p className="font-bold text-white text-xs truncate">{h.name}</p>
-                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5">
+                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5 flex-wrap">
                         <span className={`px-1.5 py-0.2 rounded border ${badge.bg} ${badge.text} ${badge.border}`}>
                           {badge.label}
                         </span>
@@ -226,6 +230,24 @@ export function HoldingsTable({
                         {h.metadata?.price_usd && (
                           <span className="text-sky-400 font-mono font-semibold">
                             • {formatUSD(h.metadata.price_usd)}
+                          </span>
+                        )}
+                        {/* Price staleness for market-rate holdings */}
+                        {priceInfo.isMarketRate && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400"
+                            title={`Price updated ${priceInfo.formattedExact} (${priceInfo.sourceLabel})`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                                priceInfo.staleness === 'fresh'
+                                  ? 'bg-emerald-400'
+                                  : priceInfo.staleness === 'moderate'
+                                  ? 'bg-amber-400'
+                                  : 'bg-zinc-500'
+                              }`}
+                            />
+                            <span>{priceInfo.relativeTime}</span>
                           </span>
                         )}
                       </div>
@@ -367,6 +389,7 @@ export function HoldingsTable({
             ) : (
               filteredHoldings.map((h) => {
                 const { currentValue: currentVal, pnl, pnlPercent: pnlPct, isMatured } = getHoldingLiveValue(h);
+                const priceInfo = getHoldingPriceUpdateInfo(h);
                 const isProfit = pnl >= 0;
                 const Icon = ASSET_ICONS[h.asset_class] || TrendingUp;
                 const badge = ASSET_BADGES[h.asset_class] || { label: h.asset_class, bg: 'bg-zinc-800', text: 'text-zinc-300', border: 'border-zinc-700' };
@@ -463,6 +486,24 @@ export function HoldingsTable({
                               LTP: ₹{h.live_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                             </div>
                           ) : null}
+                          {/* Price Staleness for market-rate holdings */}
+                          {priceInfo.isMarketRate && (
+                            <div
+                              className="text-[10px] font-sans font-normal flex items-center justify-end gap-1 mt-0.5 text-zinc-400"
+                              title={`Market price updated ${priceInfo.formattedExact} (${priceInfo.sourceLabel})`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                                  priceInfo.staleness === 'fresh'
+                                    ? 'bg-emerald-400'
+                                    : priceInfo.staleness === 'moderate'
+                                    ? 'bg-amber-400'
+                                    : 'bg-zinc-500'
+                                }`}
+                              />
+                              <span>{priceInfo.relativeTime}</span>
+                            </div>
+                          )}
                         </>
                       )}
                     </td>
@@ -555,7 +596,75 @@ export function HoldingsTable({
             </div>
 
             {/* General Metadata */}
-            <div className="text-xs space-y-2 text-zinc-300">
+            <div className="text-xs space-y-2.5 text-zinc-300">
+              {/* Market Price & Staleness Section */}
+              {(() => {
+                const priceInfo = getHoldingPriceUpdateInfo(selectedHoldingInfo);
+                if (!priceInfo.isMarketRate) return null;
+
+                return (
+                  <div className="bg-zinc-950 p-3.5 rounded-2xl border border-zinc-800 space-y-2.5 shadow-inner">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-zinc-200 flex items-center gap-1.5">
+                        <Activity className="h-3.5 w-3.5 text-emerald-400" />
+                        Market Price & Data Freshness
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border flex items-center gap-1 ${
+                          priceInfo.staleness === 'fresh'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : priceInfo.staleness === 'moderate'
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            priceInfo.staleness === 'fresh'
+                              ? 'bg-emerald-400 animate-pulse'
+                              : priceInfo.staleness === 'moderate'
+                              ? 'bg-amber-400'
+                              : 'bg-zinc-500'
+                          }`}
+                        />
+                        {priceInfo.staleness === 'fresh'
+                          ? 'Fresh / Active'
+                          : priceInfo.staleness === 'moderate'
+                          ? 'Moderate'
+                          : 'Stale Data'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-zinc-800/80">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 uppercase font-semibold block">
+                          Price Last Updated
+                        </span>
+                        <p className="text-zinc-200 font-mono font-medium mt-0.5">
+                          {priceInfo.formattedExact}
+                        </p>
+                        <p className="text-[10px] text-zinc-400 font-sans">
+                          ({priceInfo.relativeTime})
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 uppercase font-semibold block">
+                          Quote Source
+                        </span>
+                        <p className="text-zinc-200 font-medium mt-0.5">
+                          {priceInfo.sourceLabel}
+                        </p>
+                        {selectedHoldingInfo.live_price && (
+                          <p className="text-[10px] text-emerald-400 font-mono">
+                            Rate: ₹{selectedHoldingInfo.live_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* US Stock details */}
               {selectedHoldingInfo.asset_class === 'us_stock' && (
                 <div className="space-y-3 pt-1">

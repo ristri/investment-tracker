@@ -35,8 +35,17 @@ export function HeroMetrics({ summary, isPrivacyMode = false }: HeroMetricsProps
             <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-mono">
               {formatVal(summary.totalNetWorth)}
             </div>
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 text-xs flex-wrap">
               <span className="text-zinc-400 font-medium">{summary.holdingCount} Active Assets</span>
+              {summary.marketFreshnessInfo && (
+                <span
+                  className="text-zinc-400 font-mono text-[11px] flex items-center gap-1"
+                  title={`Live Market Rates updated: ${summary.marketFreshnessInfo.formattedExact} (${summary.marketFreshnessInfo.sourceLabel})`}
+                >
+                  • <span className={`h-1.5 w-1.5 rounded-full ${summary.marketFreshnessInfo.staleness === 'fresh' ? 'bg-emerald-400 animate-pulse' : summary.marketFreshnessInfo.staleness === 'moderate' ? 'bg-amber-400' : 'bg-zinc-500'}`} />
+                  <span className="text-zinc-300">Rates: {summary.marketFreshnessInfo.relativeTime}</span>
+                </span>
+              )}
             </div>
           </div>
         </div>

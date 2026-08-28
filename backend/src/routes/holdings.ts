@@ -24,8 +24,11 @@ function parseHoldingRow(row: any): Holding {
     }
   }
 
+  const price_updated_at = metadata?.price_updated_at || row.statement_date || row.updated_at || row.created_at;
+
   return {
     ...row,
+    price_updated_at,
     metadata,
   };
 }
@@ -54,20 +57,24 @@ holdings.get('/', async (c) => {
   items = await Promise.all(
     items.map(async (h) => {
       // 1. Sovereign Gold Bonds (NSE live traded price)
+      // 1. Sovereign Gold Bonds (NSE live traded price)
       if (h.asset_class === 'sgb') {
         try {
-          const identifier = h.symbol || h.metadata?.issue_series || h.name || '';
+          const identifier = h.symbol || h.metadata?.nse_symbol || h.metadata?.issue_series || h.name || '';
           const sgbQuote = await NseSgbService.getSgbQuote(identifier, false);
           if (sgbQuote && typeof sgbQuote.price === 'number') {
             const livePrice = sgbQuote.price;
             const liveVal = h.quantity * livePrice;
             const pnl = liveVal - h.invested_amount;
             const pnlPct = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+            const priceUpdatedAt = sgbQuote.updatedAt || new Date().toISOString();
 
             const updatedMeta = {
               ...(h.metadata || {}),
               nse_symbol: sgbQuote.symbolOrCode,
               live_sgb_price: livePrice,
+              price_updated_at: priceUpdatedAt,
+              price_source: 'NSE India',
             };
 
             return {
@@ -76,6 +83,7 @@ holdings.get('/', async (c) => {
               live_value: liveVal,
               unrealized_pnl: pnl,
               unrealized_pnl_percent: pnlPct,
+              price_updated_at: priceUpdatedAt,
               metadata: updatedMeta,
             };
           }
@@ -83,35 +91,112 @@ holdings.get('/', async (c) => {
       }
 
       // 2. US Stocks & US ETFs
-      if (h.asset_class === 'us_stock' && h.symbol) {
+      if (h.asset_class === 'us_stock') {
         try {
-          const quote = await StockService.getQuote(h.symbol, false);
-          if (quote && typeof quote.price === 'number') {
-            const priceUsd = quote.price;
-            const rate = h.metadata?.usd_inr_rate || usdInrRate;
-            const livePriceInr = priceUsd * rate;
-            const liveValInr = h.quantity * livePriceInr;
-            const pnlInr = liveValInr - h.invested_amount;
-            const pnlPct = h.invested_amount > 0 ? (pnlInr / h.invested_amount) * 100 : 0;
+          const sym = h.symbol || h.name;
+          if (sym) {
+            const quote = await StockService.getQuote(sym, false, h.name, db);
+            if (quote && typeof quote.price === 'number') {
+              const priceUsd = quote.price;
+              const rate = h.metadata?.usd_inr_rate || usdInrRate;
+              const livePriceInr = priceUsd * rate;
+              const liveValInr = h.quantity * livePriceInr;
+              const pnlInr = liveValInr - h.invested_amount;
+              const pnlPct = h.invested_amount > 0 ? (pnlInr / h.invested_amount) * 100 : 0;
+              const priceUpdatedAt = quote.updatedAt || new Date().toISOString();
 
-            const updatedMeta = {
-              ...(h.metadata || {}),
-              price_usd: priceUsd,
-              value_usd: h.quantity * priceUsd,
-              usd_inr_rate: rate,
-            };
+              const updatedMeta = {
+                ...(h.metadata || {}),
+                price_usd: priceUsd,
+                value_usd: h.quantity * priceUsd,
+                usd_inr_rate: rate,
+                price_updated_at: priceUpdatedAt,
+                price_source: 'Yahoo Finance',
+              };
 
-            return {
-              ...h,
-              live_price: livePriceInr,
-              live_value: liveValInr,
-              unrealized_pnl: pnlInr,
-              unrealized_pnl_percent: pnlPct,
-              metadata: updatedMeta,
-            };
+              return {
+                ...h,
+                live_price: livePriceInr,
+                live_value: liveValInr,
+                unrealized_pnl: pnlInr,
+                unrealized_pnl_percent: pnlPct,
+                price_updated_at: priceUpdatedAt,
+                metadata: updatedMeta,
+              };
+            }
           }
         } catch {}
       }
+
+      // 3. Indian Stocks & Indian ETFs
+      if (h.asset_class === 'stock' || h.asset_class === 'etf') {
+        try {
+          const sym = h.symbol || h.isin || h.name;
+          if (sym) {
+            const quote = await StockService.getQuote(sym, false, h.name, db);
+            if (quote && typeof quote.price === 'number') {
+              const livePrice = quote.price;
+              const liveVal = h.quantity * livePrice;
+              const pnl = liveVal - h.invested_amount;
+              const pnlPct = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+              const priceUpdatedAt = quote.updatedAt || new Date().toISOString();
+
+              const updatedMeta = {
+                ...(h.metadata || {}),
+                resolved_symbol: quote.symbolOrCode,
+                price_updated_at: priceUpdatedAt,
+                price_source: 'NSE / Yahoo',
+              };
+
+              return {
+                ...h,
+                live_price: livePrice,
+                live_value: liveVal,
+                unrealized_pnl: pnl,
+                unrealized_pnl_percent: pnlPct,
+                price_updated_at: priceUpdatedAt,
+                metadata: updatedMeta,
+              };
+            }
+          }
+        } catch {}
+      }
+
+      // 4. Mutual Funds (AMFI NAV)
+      if (h.asset_class === 'mutual_fund') {
+        try {
+          const schemeCodeOrName = h.metadata?.scheme_code || h.name;
+          if (schemeCodeOrName) {
+            const mfQuote = await AmfiService.getNavForScheme(schemeCodeOrName, false, db);
+            if (mfQuote && typeof mfQuote.price === 'number') {
+              const livePrice = mfQuote.price;
+              const liveVal = h.quantity * livePrice;
+              const pnl = liveVal - h.invested_amount;
+              const pnlPct = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+              const priceUpdatedAt = mfQuote.updatedAt || new Date().toISOString();
+
+              const parsedCode = !isNaN(Number(mfQuote.symbolOrCode)) ? Number(mfQuote.symbolOrCode) : undefined;
+              const updatedMeta = {
+                ...(h.metadata || {}),
+                scheme_code: h.metadata?.scheme_code || parsedCode,
+                price_updated_at: priceUpdatedAt,
+                price_source: 'AMFI NAV',
+              };
+
+              return {
+                ...h,
+                live_price: livePrice,
+                live_value: liveVal,
+                unrealized_pnl: pnl,
+                unrealized_pnl_percent: pnlPct,
+                price_updated_at: priceUpdatedAt,
+                metadata: updatedMeta,
+              };
+            }
+          }
+        } catch {}
+      }
+
       return h;
     })
   );
@@ -340,11 +425,12 @@ holdings.post('/batch-import', async (c) => {
     let pnlPercent = h.unrealized_pnl_percent ?? (investedAmount > 0 ? (pnl / investedAmount) * 100 : 0);
     const itemSource = (h.source === 'epf_pdf' ? 'epf_passbook' : h.source) || normalizedSource;
 
-    // For US stocks, fetch real-time market price & exchange rate to calculate live returns
-    if (h.asset_class === 'us_stock' && h.symbol) {
+    // 1. For US stocks, fetch real-time market price & exchange rate to calculate live returns
+    if (h.asset_class === 'us_stock') {
       try {
-        const quote = await StockService.getQuote(h.symbol, false);
-        const usdQuote = await StockService.getQuote('USDINR=X', false);
+        const sym = h.symbol || h.name;
+        const quote = await StockService.getQuote(sym, false, h.name, db);
+        const usdQuote = await StockService.getQuote('USDINR=X', false, undefined, db);
         const rate = usdQuote?.price && usdQuote.price > 0 ? usdQuote.price : (h.metadata?.usd_inr_rate || 88.0);
         if (quote && typeof quote.price === 'number') {
           const priceUsd = quote.price;
@@ -355,16 +441,84 @@ holdings.post('/batch-import', async (c) => {
           pnl = liveValInr - investedAmount;
           pnlPercent = investedAmount > 0 ? (pnl / investedAmount) * 100 : 0;
 
-          if (h.metadata) {
-            h.metadata.price_usd = priceUsd;
-            h.metadata.value_usd = quantity * priceUsd;
-            h.metadata.usd_inr_rate = rate;
-          }
+          h.metadata = {
+            ...(h.metadata || {}),
+            price_usd: priceUsd,
+            value_usd: quantity * priceUsd,
+            usd_inr_rate: rate,
+            price_updated_at: quote.updatedAt || new Date().toISOString(),
+            price_source: 'Yahoo Finance',
+          };
         }
       } catch {}
     }
 
-    totalValue += (h.asset_class === 'us_stock' ? liveValue : statementValue);
+    // 2. For Indian Stocks & Indian ETFs, look up DB mapping or resolve live price
+    if (h.asset_class === 'stock' || h.asset_class === 'etf') {
+      try {
+        const sym = h.symbol || h.isin || h.name;
+        const quote = await StockService.getQuote(sym, false, h.name, db);
+        if (quote && typeof quote.price === 'number') {
+          livePrice = quote.price;
+          liveValue = quantity * livePrice;
+          pnl = liveValue - investedAmount;
+          pnlPercent = investedAmount > 0 ? (pnl / investedAmount) * 100 : 0;
+
+          h.metadata = {
+            ...(h.metadata || {}),
+            resolved_symbol: quote.symbolOrCode,
+            price_updated_at: quote.updatedAt || new Date().toISOString(),
+            price_source: 'NSE / Yahoo',
+          };
+        }
+      } catch {}
+    }
+
+    // 3. For Mutual Funds, look up DB mapping or resolve AMFI scheme code and live NAV
+    if (h.asset_class === 'mutual_fund') {
+      try {
+        const schemeCodeOrName = h.metadata?.scheme_code || h.name;
+        const mfQuote = await AmfiService.getNavForScheme(schemeCodeOrName, false, db);
+        if (mfQuote && typeof mfQuote.price === 'number') {
+          livePrice = mfQuote.price;
+          liveValue = quantity * livePrice;
+          pnl = liveValue - investedAmount;
+          pnlPercent = investedAmount > 0 ? (pnl / investedAmount) * 100 : 0;
+
+          const parsedCode = !isNaN(Number(mfQuote.symbolOrCode)) ? Number(mfQuote.symbolOrCode) : undefined;
+          h.metadata = {
+            ...(h.metadata || {}),
+            scheme_code: h.metadata?.scheme_code || parsedCode,
+            price_updated_at: mfQuote.updatedAt || new Date().toISOString(),
+            price_source: 'AMFI NAV',
+          };
+        }
+      } catch {}
+    }
+
+    // 4. For SGBs, look up series and live quote
+    if (h.asset_class === 'sgb') {
+      try {
+        const identifier = h.symbol || h.metadata?.nse_symbol || h.metadata?.issue_series || h.name || '';
+        const sgbQuote = await NseSgbService.getSgbQuote(identifier, false);
+        if (sgbQuote && typeof sgbQuote.price === 'number') {
+          livePrice = sgbQuote.price;
+          liveValue = quantity * livePrice;
+          pnl = liveValue - investedAmount;
+          pnlPercent = investedAmount > 0 ? (pnl / investedAmount) * 100 : 0;
+
+          h.metadata = {
+            ...(h.metadata || {}),
+            nse_symbol: sgbQuote.symbolOrCode,
+            live_sgb_price: livePrice,
+            price_updated_at: sgbQuote.updatedAt || new Date().toISOString(),
+            price_source: 'NSE India',
+          };
+        }
+      } catch {}
+    }
+
+    totalValue += (['stock', 'etf', 'us_stock', 'mutual_fund', 'sgb'].includes(h.asset_class) ? liveValue : statementValue);
 
     // Special handling for EPF to support multi-year passbooks per member ID
     if (isEpf) {

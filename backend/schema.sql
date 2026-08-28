@@ -70,8 +70,22 @@ CREATE TABLE IF NOT EXISTS import_logs (
   created_at           TEXT DEFAULT (datetime('now'))
 );
 
+-- Persistent Symbol & Instrument Mappings (ISIN -> Exchange Ticker, Fund Name -> AMFI Code)
+CREATE TABLE IF NOT EXISTS market_symbol_mappings (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  asset_class      TEXT NOT NULL,
+  query_key        TEXT NOT NULL UNIQUE,
+  resolved_symbol  TEXT NOT NULL,
+  resolved_name    TEXT,
+  source           TEXT NOT NULL DEFAULT 'yahoo',
+  created_at       TEXT DEFAULT (datetime('now')),
+  updated_at       TEXT DEFAULT (datetime('now'))
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_holdings_user_asset ON holdings(user_id, asset_class);
 CREATE INDEX IF NOT EXISTS idx_holdings_isin ON holdings(isin);
 CREATE INDEX IF NOT EXISTS idx_snapshots_user_date ON net_worth_snapshots(user_id, snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_import_logs_user ON import_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_market_mappings_key ON market_symbol_mappings(query_key);
+CREATE INDEX IF NOT EXISTS idx_market_mappings_class ON market_symbol_mappings(asset_class);

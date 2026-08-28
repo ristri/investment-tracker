@@ -1,4 +1,5 @@
 import { MarketQuote } from '@investment-tracker/shared';
+import { SymbolMappingService } from './symbolMappingService';
 
 interface CachedStockEntry {
   quote: MarketQuote;
@@ -7,6 +8,7 @@ interface CachedStockEntry {
 
 // In-memory cache for stock quotes
 const stockMemoryCache = new Map<string, CachedStockEntry>();
+const symbolResolutionCache = new Map<string, string>();
 
 // In-flight promise map for request deduplication
 const inFlightPromises = new Map<string, Promise<MarketQuote | null>>();
@@ -114,19 +116,130 @@ function shouldFetchStockQuote(cachedEntry?: CachedStockEntry): boolean {
 
 export class StockService {
   /**
-   * Normalize symbol for exchange queries (US vs Indian)
+   * Smart resolver to convert ISIN, company name, or raw ticker into a valid Yahoo Finance symbol.
+   * Checks in-memory cache -> persistent D1 database -> Yahoo Search API.
    */
-  static normalizeSymbol(symbol: string): string {
-    let clean = symbol.trim().toUpperCase();
-    if (clean.endsWith('=X') || clean.includes('.')) {
-      return clean;
+  static async resolveSymbol(rawIdentifier: string, fallbackName?: string, db?: any): Promise<string> {
+    if (!rawIdentifier && !fallbackName) return '';
+    const trimmed = (rawIdentifier || fallbackName || '').trim();
+    const upper = trimmed.toUpperCase();
+
+    // 1. Check in-memory cache
+    if (symbolResolutionCache.has(upper)) {
+      return symbolResolutionCache.get(upper)!;
     }
-    // US Index ETFs and common US stocks without dot
-    const knownUsTickers = ['VOO', 'QQQ', 'QQQM', 'VTI', 'VT', 'SCHD', 'SPY', 'IVV', 'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'BRK.B'];
-    if (knownUsTickers.includes(clean)) {
-      return clean;
+
+    // 2. Direct exchange/currency symbols
+    if (upper.endsWith('=X') || upper.endsWith('.NS') || upper.endsWith('.BO') || upper.includes('^')) {
+      symbolResolutionCache.set(upper, upper);
+      return upper;
     }
-    return `${clean}.NS`;
+
+    // 3. US Index ETFs and common US stocks
+    const knownUsTickers = [
+      'VOO', 'QQQ', 'QQQM', 'VTI', 'VT', 'SCHD', 'SPY', 'IVV', 'DIA', 'IWM',
+      'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'BRK.B', 'BRK-B',
+      'NFLX', 'AMD', 'INTC', 'TSM', 'AVGO', 'COST', 'PEP', 'KO', 'WMT', 'JNJ', 'JPM', 'V', 'MA'
+    ];
+    if (knownUsTickers.includes(upper)) {
+      symbolResolutionCache.set(upper, upper);
+      return upper;
+    }
+
+    // 4. Check persistent D1 database for mapped symbol
+    if (db) {
+      const fromDb =
+        (await SymbolMappingService.getResolvedSymbol(db, rawIdentifier)) ||
+        (fallbackName ? await SymbolMappingService.getResolvedSymbol(db, fallbackName) : null);
+
+      if (fromDb) {
+        symbolResolutionCache.set(upper, fromDb);
+        return fromDb;
+      }
+    }
+
+    // 5. Build candidate search queries in priority order for Yahoo search
+    const queries: string[] = [];
+    if (upper.startsWith('INF') || upper.startsWith('IN00')) {
+      // For ETF/SGB ISINs (which Yahoo doesn't index by ISIN), search by name first
+      if (fallbackName) {
+        queries.push(fallbackName.trim());
+        const stripped = fallbackName.replace(/ETF/gi, '').replace(/BeES/gi, '').replace(/\s+/g, ' ').trim();
+        if (stripped && stripped !== fallbackName) queries.push(stripped);
+      }
+      queries.push(trimmed);
+    } else {
+      queries.push(trimmed);
+      if (fallbackName && fallbackName.trim() !== trimmed) {
+        queries.push(fallbackName.trim());
+        const stripped = fallbackName.replace(/ETF/gi, '').replace(/BeES/gi, '').replace(/\s+/g, ' ').trim();
+        if (stripped && stripped !== fallbackName) queries.push(stripped);
+      }
+    }
+
+    for (const q of queries) {
+      if (!q || q.length < 2) continue;
+      try {
+        const res = await fetch(
+          `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=6`,
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'application/json, text/plain, */*',
+            },
+          }
+        );
+
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          const quotes = data?.quotes || [];
+          // Prioritize NSE (.NS), then BSE (.BO), then US ticker, excluding 0P mutual fund codes
+          const matched =
+            quotes.find((item: any) => item.symbol && item.symbol.endsWith('.NS') && !item.symbol.startsWith('0P')) ||
+            quotes.find((item: any) => item.symbol && item.symbol.endsWith('.BO') && !item.symbol.startsWith('0P')) ||
+            quotes.find((item: any) => item.symbol && !item.symbol.includes('.') && !item.symbol.startsWith('0P')) ||
+            quotes.find((item: any) => item.symbol && !item.symbol.startsWith('0P'));
+
+          if (matched?.symbol) {
+            symbolResolutionCache.set(upper, matched.symbol);
+            if (fallbackName) {
+              symbolResolutionCache.set(fallbackName.trim().toUpperCase(), matched.symbol);
+            }
+
+            // Persist the newly resolved mapping to the D1 database
+            if (db) {
+              const assetClass = upper.startsWith('INF') || (fallbackName && /ETF|BEES/i.test(fallbackName)) ? 'etf' : 'stock';
+              await SymbolMappingService.saveMapping(
+                db,
+                assetClass,
+                rawIdentifier || fallbackName || '',
+                matched.symbol,
+                matched.shortname || matched.longname || fallbackName,
+                'yahoo'
+              );
+              if (fallbackName && fallbackName !== rawIdentifier) {
+                await SymbolMappingService.saveMapping(
+                  db,
+                  assetClass,
+                  fallbackName,
+                  matched.symbol,
+                  matched.shortname || matched.longname,
+                  'yahoo'
+                );
+              }
+            }
+
+            return matched.symbol;
+          }
+        }
+      } catch (e) {
+        console.error(`Failed to resolve symbol for query ${q}:`, e);
+      }
+    }
+
+    const defaultSymbol = upper.includes('.') ? upper : `${upper}.NS`;
+    symbolResolutionCache.set(upper, defaultSymbol);
+    return defaultSymbol;
   }
 
   /**
@@ -176,8 +289,15 @@ export class StockService {
   /**
    * Fetch quote for a single stock / ETF symbol with full deduplication & caching
    */
-  static async getQuote(rawSymbol: string, forceRefresh: boolean = false): Promise<MarketQuote | null> {
-    const symbol = this.normalizeSymbol(rawSymbol);
+  static async getQuote(
+    rawIdentifier: string,
+    forceRefresh: boolean = false,
+    fallbackName?: string,
+    db?: any
+  ): Promise<MarketQuote | null> {
+    if (!rawIdentifier && !fallbackName) return null;
+    const symbol = await this.resolveSymbol(rawIdentifier, fallbackName, db);
+    if (!symbol) return null;
     const key = `stock_${symbol}`;
 
     // 1. Return from in-memory cache if fresh
@@ -187,7 +307,7 @@ export class StockService {
     }
 
     // 2. If currently rate-limited by Yahoo, return cached immediately
-    if (Date.now() < yahooRateLimitedUntil) {
+    if (!forceRefresh && Date.now() < yahooRateLimitedUntil) {
       return cached ? cached.quote : null;
     }
 
@@ -198,17 +318,28 @@ export class StockService {
 
     const fetchPromise = (async () => {
       try {
-        const session = await this.getYahooSession();
-        const crumbParam = session?.crumb ? `&crumb=${encodeURIComponent(session.crumb)}` : '';
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d${crumbParam}`;
+        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-        const res = await fetch(url, {
+        // Try direct v8 chart first
+        let res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'User-Agent': userAgent,
             'Accept': 'application/json, text/plain, */*',
-            ...(session?.cookie ? { 'Cookie': session.cookie } : {}),
           },
         });
+
+        // If 401 Unauthorized, retry with session crumb
+        if (res.status === 401) {
+          const session = await this.getYahooSession();
+          const crumbParam = session?.crumb ? `&crumb=${encodeURIComponent(session.crumb)}` : '';
+          res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d${crumbParam}`, {
+            headers: {
+              'User-Agent': userAgent,
+              'Accept': 'application/json, text/plain, */*',
+              ...(session?.cookie ? { 'Cookie': session.cookie } : {}),
+            },
+          });
+        }
 
         if (res.status === 429) {
           // Rate-limited: back off for 15 minutes and serve cached
@@ -220,7 +351,7 @@ export class StockService {
           return cached ? cached.quote : null;
         }
 
-        const data = await res.json() as any;
+        const data = (await res.json()) as any;
         const result = data?.chart?.result?.[0];
         if (!result || !result.meta) {
           return cached ? cached.quote : null;
@@ -238,7 +369,7 @@ export class StockService {
         const currency = meta.currency === 'USD' ? 'USD' : 'INR';
 
         const quote: MarketQuote = {
-          symbolOrCode: rawSymbol,
+          symbolOrCode: symbol,
           name: meta.shortName || meta.symbol,
           price,
           previousClose: prevClose,
@@ -256,7 +387,7 @@ export class StockService {
 
         return quote;
       } catch (e) {
-        console.error(`Stock quote fetch error for ${rawSymbol}:`, e);
+        console.error(`Stock quote fetch error for ${rawIdentifier} (${symbol}):`, e);
         return cached ? cached.quote : null;
       } finally {
         inFlightPromises.delete(key);

@@ -113,6 +113,10 @@ export async function parseGrowwStocksExcel(file: File | ArrayBuffer): Promise<P
       unrealized_pnl_percent: pnlPercent,
       source: 'groww_stocks',
       statement_date: statementDate,
+      metadata: {
+        price_updated_at: statementDate,
+        price_source: 'Groww Statement',
+      },
     });
   }
 

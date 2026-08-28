@@ -134,7 +134,7 @@ market.post('/refresh-holdings', async (c) => {
           try { meta = JSON.parse(h.metadata_json); } catch {}
         }
 
-        const identifier = h.symbol || meta.issue_series || h.name || '';
+        const identifier = h.symbol || meta.nse_symbol || meta.issue_series || h.name || '';
         const sgbQuote = await NseSgbService.getSgbQuote(identifier, force);
 
         if (sgbQuote && typeof sgbQuote.price === 'number') {
@@ -142,11 +142,14 @@ market.post('/refresh-holdings', async (c) => {
           const liveValue = h.quantity * livePrice;
           const pnl = liveValue - h.invested_amount;
           const pnlPercent = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+          const priceUpdatedAt = sgbQuote.updatedAt || new Date().toISOString();
 
           const updatedMeta = {
             ...meta,
             nse_symbol: sgbQuote.symbolOrCode,
             live_sgb_price: livePrice,
+            price_updated_at: priceUpdatedAt,
+            price_source: 'NSE India',
           };
 
           await db
@@ -166,60 +169,128 @@ market.post('/refresh-holdings', async (c) => {
 
     // 2. Indian Stocks & Indian ETFs
     if (h.asset_class === 'stock' || h.asset_class === 'etf') {
-      const sym = h.symbol || h.isin;
+      const sym = h.symbol || h.isin || h.name;
       if (sym) {
-        const quote = await StockService.getQuote(sym, force);
-        if (quote && typeof quote.price === 'number') {
-          const livePrice = quote.price;
-          const liveValue = h.quantity * livePrice;
-          const pnl = liveValue - h.invested_amount;
-          const pnlPercent = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+        try {
+          const quote = await StockService.getQuote(sym, force, h.name, db);
+          if (quote && typeof quote.price === 'number') {
+            const livePrice = quote.price;
+            const liveValue = h.quantity * livePrice;
+            const pnl = liveValue - h.invested_amount;
+            const pnlPercent = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+            const priceUpdatedAt = quote.updatedAt || new Date().toISOString();
 
-          await db
-            .prepare(
-              `UPDATE holdings SET live_price = ?, live_value = ?, unrealized_pnl = ?, unrealized_pnl_percent = ?, updated_at = datetime('now')
-               WHERE id = ?`
-            )
-            .bind(livePrice, liveValue, pnl, pnlPercent, h.id)
-            .run();
+            let meta: any = {};
+            if (h.metadata_json) {
+              try { meta = JSON.parse(h.metadata_json); } catch {}
+            }
 
-          updatedCount++;
+            const updatedMeta = {
+              ...meta,
+              resolved_symbol: quote.symbolOrCode,
+              price_updated_at: priceUpdatedAt,
+              price_source: 'NSE / Yahoo',
+            };
+
+            await db
+              .prepare(
+                `UPDATE holdings SET live_price = ?, live_value = ?, unrealized_pnl = ?, unrealized_pnl_percent = ?, metadata_json = ?, updated_at = datetime('now')
+                 WHERE id = ?`
+              )
+              .bind(livePrice, liveValue, pnl, pnlPercent, JSON.stringify(updatedMeta), h.id)
+              .run();
+
+            updatedCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to refresh stock/etf holding ${h.id}:`, err);
         }
       }
     }
 
     // 3. US Stocks & US ETFs (VOO, QQQM, AAPL, etc.)
-    if (h.asset_class === 'us_stock' && h.symbol) {
-      const quote = await StockService.getQuote(h.symbol, force);
-      if (quote && typeof quote.price === 'number') {
-        const priceUsd = quote.price;
-        const totalValUsd = h.quantity * priceUsd;
-        const livePriceInr = priceUsd * usdInrRate;
-        const liveValueInr = totalValUsd * usdInrRate;
-        const pnl = liveValueInr - h.invested_amount;
-        const pnlPercent = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
-
-        let meta: any = {};
+    if (h.asset_class === 'us_stock') {
+      const sym = h.symbol || h.name;
+      if (sym) {
         try {
-          meta = JSON.parse(h.metadata_json || '{}');
-        } catch {}
+          const quote = await StockService.getQuote(sym, force, h.name, db);
+          if (quote && typeof quote.price === 'number') {
+            const priceUsd = quote.price;
+            const totalValUsd = h.quantity * priceUsd;
+            const livePriceInr = priceUsd * usdInrRate;
+            const liveValueInr = totalValUsd * usdInrRate;
+            const pnl = liveValueInr - h.invested_amount;
+            const pnlPercent = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+            const priceUpdatedAt = quote.updatedAt || new Date().toISOString();
 
-        const updatedMeta = {
-          ...meta,
-          price_usd: priceUsd,
-          value_usd: totalValUsd,
-          usd_inr_rate: usdInrRate,
-        };
+            let meta: any = {};
+            try {
+              meta = JSON.parse(h.metadata_json || '{}');
+            } catch {}
 
-        await db
-          .prepare(
-            `UPDATE holdings SET live_price = ?, live_value = ?, unrealized_pnl = ?, unrealized_pnl_percent = ?, metadata_json = ?, updated_at = datetime('now')
-             WHERE id = ?`
-          )
-          .bind(livePriceInr, liveValueInr, pnl, pnlPercent, JSON.stringify(updatedMeta), h.id)
-          .run();
+            const updatedMeta = {
+              ...meta,
+              price_usd: priceUsd,
+              value_usd: totalValUsd,
+              usd_inr_rate: usdInrRate,
+              price_updated_at: priceUpdatedAt,
+              price_source: 'Yahoo Finance',
+            };
 
-        updatedCount++;
+            await db
+              .prepare(
+                `UPDATE holdings SET live_price = ?, live_value = ?, unrealized_pnl = ?, unrealized_pnl_percent = ?, metadata_json = ?, updated_at = datetime('now')
+                 WHERE id = ?`
+              )
+              .bind(livePriceInr, liveValueInr, pnl, pnlPercent, JSON.stringify(updatedMeta), h.id)
+              .run();
+
+            updatedCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to refresh US stock holding ${h.id}:`, err);
+        }
+      }
+    }
+
+    // 4. Mutual Funds (AMFI Live NAV)
+    if (h.asset_class === 'mutual_fund') {
+      try {
+        let meta: any = {};
+        if (h.metadata_json) {
+          try { meta = JSON.parse(h.metadata_json); } catch {}
+        }
+        const schemeCodeOrName = meta.scheme_code || h.name;
+        if (schemeCodeOrName) {
+          const mfQuote = await AmfiService.getNavForScheme(schemeCodeOrName, force, db);
+          if (mfQuote && typeof mfQuote.price === 'number') {
+            const livePrice = mfQuote.price;
+            const liveValue = h.quantity * livePrice;
+            const pnl = liveValue - h.invested_amount;
+            const pnlPercent = h.invested_amount > 0 ? (pnl / h.invested_amount) * 100 : 0;
+            const priceUpdatedAt = mfQuote.updatedAt || new Date().toISOString();
+
+            const parsedCode = !isNaN(Number(mfQuote.symbolOrCode)) ? Number(mfQuote.symbolOrCode) : undefined;
+            const updatedMeta = {
+              ...meta,
+              scheme_code: meta.scheme_code || parsedCode,
+              price_updated_at: priceUpdatedAt,
+              price_source: 'AMFI NAV',
+            };
+
+            await db
+              .prepare(
+                `UPDATE holdings SET live_price = ?, live_value = ?, unrealized_pnl = ?, unrealized_pnl_percent = ?, metadata_json = ?, updated_at = datetime('now')
+                 WHERE id = ?`
+              )
+              .bind(livePrice, liveValue, pnl, pnlPercent, JSON.stringify(updatedMeta), h.id)
+              .run();
+
+            updatedCount++;
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to refresh MF holding ${h.id}:`, err);
       }
     }
   }
@@ -229,6 +300,17 @@ market.post('/refresh-holdings', async (c) => {
     updatedCount,
     usdInrRate,
   });
+});
+
+// 9. GET /api/v1/market/mappings - View persistent symbol mappings stored in DB
+market.get('/mappings', async (c) => {
+  const db = c.env.investment_tracker_db;
+  try {
+    const res = await db.prepare('SELECT * FROM market_symbol_mappings ORDER BY asset_class, query_key').all();
+    return c.json({ mappings: res?.results || [] });
+  } catch (e) {
+    return c.json({ mappings: [] });
+  }
 });
 
 export default market;

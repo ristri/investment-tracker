@@ -1,4 +1,12 @@
-import { AssetClass, Holding, MacroAssetClass, PortfolioSummary } from './types';
+import {
+  AssetClass,
+  Holding,
+  MacroAssetClass,
+  PortfolioSummary,
+  PriceUpdateInfo,
+  PriceStaleness,
+  AssetClassBreakdownItem,
+} from './types';
 
 export interface MacroSplit {
   equity: number; // percentage (0-100)
@@ -62,8 +70,8 @@ export function formatPercent(percent: number | null | undefined, includeSign: b
 export function formatLocalDateTime(dateInput?: string | Date | null): string {
   if (!dateInput) return '-';
   try {
-    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    if (isNaN(d.getTime())) return String(dateInput);
+    const d = typeof dateInput === 'string' ? parseDateSafe(dateInput) : dateInput;
+    if (!d || isNaN(d.getTime())) return String(dateInput);
     return d.toLocaleString('en-IN', {
       day: '2-digit',
       month: 'short',
@@ -84,8 +92,8 @@ export function formatLocalDateTime(dateInput?: string | Date | null): string {
 export function formatLocalDate(dateInput?: string | Date | null): string {
   if (!dateInput) return '-';
   try {
-    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    if (isNaN(d.getTime())) return String(dateInput);
+    const d = typeof dateInput === 'string' ? parseDateSafe(dateInput) : dateInput;
+    if (!d || isNaN(d.getTime())) return String(dateInput);
     return d.toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
@@ -103,8 +111,8 @@ export function formatLocalDate(dateInput?: string | Date | null): string {
 export function formatLocalTime(dateInput?: string | Date | null): string {
   if (!dateInput) return '-';
   try {
-    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    if (isNaN(d.getTime())) return String(dateInput);
+    const d = typeof dateInput === 'string' ? parseDateSafe(dateInput) : dateInput;
+    if (!d || isNaN(d.getTime())) return String(dateInput);
     return d.toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
@@ -123,6 +131,227 @@ export function getLocalTodayInputString(d: Date = new Date()): string {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Asset classes that are priced dynamically based on financial market rates (Stocks, MF NAV, US Stocks, SGB, ETF).
+ * Non-market asset classes include statutory fixed-income (EPF, PPF, Fixed Deposits).
+ */
+export const MARKET_RATE_ASSET_CLASSES: readonly AssetClass[] = [
+  'stock',
+  'mutual_fund',
+  'us_stock',
+  'sgb',
+  'etf',
+] as const;
+
+/**
+ * Check whether an asset class is valued using market rates.
+ */
+export function isMarketRateAssetClass(assetClass: AssetClass): boolean {
+  return (MARKET_RATE_ASSET_CLASSES as readonly string[]).includes(assetClass);
+}
+
+/**
+ * Safely parses multiple date formats into a JavaScript Date object:
+ * - ISO strings (2026-08-28T09:15:00.000Z)
+ * - SQLite timestamps (2026-08-28 09:15:00)
+ * - DD-MM-YYYY / DD/MM/YYYY (27-08-2026)
+ * - YYYY-MM-DD (2026-08-27)
+ * - DD-MMM-YYYY (27-Aug-2026)
+ * - Millisecond timestamps
+ */
+export function parseDateSafe(input: any): Date | null {
+  if (!input) return null;
+  if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+  if (typeof input === 'number') {
+    const d = new Date(input);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof input !== 'string') return null;
+  const str = input.trim();
+  if (!str) return null;
+
+  // 1. If SQLite datetime format "YYYY-MM-DD HH:MM:SS" -> treat as UTC
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(str)) {
+    const d = new Date(str.replace(' ', 'T') + 'Z');
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // 2. ISO timestamp or date with timezone
+  if (str.includes('T') || str.endsWith('Z')) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // 3. DD-MM-YYYY or DD/MM/YYYY (e.g. 27-08-2026)
+  const ddmmyyyyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const day = parseInt(ddmmyyyyMatch[1], 10);
+    const month = parseInt(ddmmyyyyMatch[2], 10) - 1;
+    const year = parseInt(ddmmyyyyMatch[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // 4. YYYY-MM-DD (e.g. 2026-08-27)
+  const yyyymmddMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (yyyymmddMatch) {
+    const year = parseInt(yyyymmddMatch[1], 10);
+    const month = parseInt(yyyymmddMatch[2], 10) - 1;
+    const day = parseInt(yyyymmddMatch[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // 5. DD-MMM-YYYY (e.g. 27-Aug-2026)
+  const ddMmmYyyyMatch = str.match(/^(\d{1,2})[-/ ]([A-Za-z]{3})[-/ ](\d{4})$/);
+  if (ddMmmYyyyMatch) {
+    const day = parseInt(ddMmmYyyyMatch[1], 10);
+    const monthStr = ddMmmYyyyMatch[2].toLowerCase();
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const month = months.indexOf(monthStr);
+    const year = parseInt(ddMmmYyyyMatch[3], 10);
+    if (month !== -1) {
+      const d = new Date(year, month, day);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  const fallback = new Date(str);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/**
+ * Calculates human-readable price staleness, relative time, and exact formatted date for a holding.
+ */
+export function getHoldingPriceUpdateInfo(h: Holding, now: Date = new Date()): PriceUpdateInfo {
+  const isMarketRate = isMarketRateAssetClass(h.asset_class);
+  if (!isMarketRate) {
+    return {
+      timestamp: null,
+      relativeTime: '-',
+      formattedExact: '-',
+      staleness: 'fresh',
+      sourceLabel: 'Fixed Rate / Passbook',
+      isMarketRate: false,
+    };
+  }
+
+  const rawTimestamp =
+    h.metadata?.price_updated_at ||
+    h.price_updated_at ||
+    h.statement_date ||
+    h.updated_at ||
+    h.created_at;
+
+  const defaultSource =
+    h.asset_class === 'sgb'
+      ? 'NSE India'
+      : h.asset_class === 'us_stock'
+      ? 'Yahoo Finance'
+      : h.asset_class === 'mutual_fund'
+      ? (h.source === 'groww_mf' ? 'Groww Statement / AMFI' : 'AMFI NAV')
+      : (h.asset_class === 'stock' || h.asset_class === 'etf')
+      ? 'NSE / Yahoo'
+      : h.source.replace(/_/g, ' ');
+
+  const sourceLabel = h.metadata?.price_source || defaultSource;
+  const dateObj = parseDateSafe(rawTimestamp);
+
+  if (!dateObj) {
+    return {
+      timestamp: rawTimestamp || null,
+      relativeTime: 'Unknown',
+      formattedExact: rawTimestamp || 'Unknown',
+      staleness: 'stale',
+      sourceLabel,
+      isMarketRate: true,
+    };
+  }
+
+  const diffMs = now.getTime() - dateObj.getTime();
+  const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  // Check if string contains explicit time
+  const hasTime = !!(
+    rawTimestamp &&
+    (rawTimestamp.includes(':') || rawTimestamp.includes('T'))
+  );
+
+  let relativeTime = '';
+  let staleness: PriceStaleness = 'fresh';
+
+  if (diffMins < 2) {
+    relativeTime = 'Just now';
+    staleness = 'fresh';
+  } else if (diffMins < 60) {
+    relativeTime = `${diffMins}m ago`;
+    staleness = 'fresh';
+  } else if (diffHours < 4) {
+    relativeTime = `${diffHours}h ago`;
+    staleness = 'fresh';
+  } else if (diffHours < 24) {
+    const isSameDay = now.toDateString() === dateObj.toDateString();
+    if (isSameDay) {
+      relativeTime = hasTime ? `Today, ${formatLocalTime(dateObj)}` : 'Today';
+      staleness = 'moderate';
+    } else {
+      relativeTime = `${diffHours}h ago`;
+      staleness = 'moderate';
+    }
+  } else if (diffDays === 1 || (diffHours < 48 && now.getDate() !== dateObj.getDate())) {
+    relativeTime = 'Yesterday';
+    staleness = 'moderate';
+  } else if (diffDays < 7) {
+    relativeTime = `${diffDays}d ago`;
+    staleness = diffDays <= 2 ? 'moderate' : 'stale';
+  } else {
+    relativeTime = formatLocalDate(dateObj);
+    staleness = 'stale';
+  }
+
+  const formattedExact = hasTime ? formatLocalDateTime(dateObj) : formatLocalDate(dateObj);
+
+  return {
+    timestamp: rawTimestamp || dateObj.toISOString(),
+    relativeTime,
+    formattedExact,
+    staleness,
+    sourceLabel,
+    isMarketRate: true,
+  };
+}
+
+/**
+ * Returns aggregated price update freshness for an entire Asset Class.
+ */
+export function getAssetClassPriceUpdateInfo(
+  holdings: Holding[],
+  assetClass: AssetClass,
+  now: Date = new Date()
+): PriceUpdateInfo | null {
+  if (!isMarketRateAssetClass(assetClass)) return null;
+
+  const relevantHoldings = holdings.filter((h) => h.asset_class === assetClass);
+  if (relevantHoldings.length === 0) return null;
+
+  let latestDate: Date | null = null;
+  let latestInfo: PriceUpdateInfo | null = null;
+
+  for (const h of relevantHoldings) {
+    const info = getHoldingPriceUpdateInfo(h, now);
+    const parsed = parseDateSafe(info.timestamp);
+    if (parsed && (!latestDate || parsed.getTime() > latestDate.getTime())) {
+      latestDate = parsed;
+      latestInfo = info;
+    }
+  }
+
+  return latestInfo || getHoldingPriceUpdateInfo(relevantHoldings[0], now);
 }
 
 /**
@@ -415,11 +644,15 @@ export function getHoldingLiveValue(h: Holding): {
 /**
  * Computes portfolio summary and aggregations from active holdings
  */
-export function computePortfolioSummary(holdings: Holding[]): PortfolioSummary {
+export function computePortfolioSummary(holdings: Holding[], now: Date = new Date()): PortfolioSummary {
   const assetClasses: AssetClass[] = ['stock', 'mutual_fund', 'us_stock', 'sgb', 'etf', 'epf', 'ppf', 'fd'];
   
   const assetClassBreakdown: PortfolioSummary['assetClassBreakdown'] = {} as any;
   for (const ac of assetClasses) {
+    const isMarketRate = isMarketRateAssetClass(ac);
+    const priceUpdateInfo = isMarketRate ? getAssetClassPriceUpdateInfo(holdings, ac, now) : null;
+    const priceUpdatedAt = priceUpdateInfo?.timestamp || null;
+
     assetClassBreakdown[ac] = {
       invested: 0,
       current: 0,
@@ -427,6 +660,9 @@ export function computePortfolioSummary(holdings: Holding[]): PortfolioSummary {
       gainPercent: 0,
       count: 0,
       allocationPercent: 0,
+      isMarketRate,
+      priceUpdatedAt,
+      priceUpdateInfo,
     };
   }
 
@@ -492,6 +728,32 @@ export function computePortfolioSummary(holdings: Holding[]): PortfolioSummary {
     },
   };
 
+  // Find latest market refresh timestamp across all market-rate holdings
+  const marketHoldings = holdings.filter(
+    (h) => isMarketRateAssetClass(h.asset_class) && !isMaturedFD(h)
+  );
+  let lastMarketRefresh: string | null = null;
+  let marketFreshnessInfo: PriceUpdateInfo | null = null;
+
+  if (marketHoldings.length > 0) {
+    let latestDate: Date | null = null;
+    let latestHolding: Holding | null = null;
+
+    for (const h of marketHoldings) {
+      const info = getHoldingPriceUpdateInfo(h, now);
+      const parsed = parseDateSafe(info.timestamp);
+      if (parsed && (!latestDate || parsed.getTime() > latestDate.getTime())) {
+        latestDate = parsed;
+        latestHolding = h;
+      }
+    }
+
+    if (latestHolding) {
+      marketFreshnessInfo = getHoldingPriceUpdateInfo(latestHolding, now);
+      lastMarketRefresh = marketFreshnessInfo.timestamp;
+    }
+  }
+
   return {
     totalNetWorth,
     totalInvested,
@@ -500,5 +762,7 @@ export function computePortfolioSummary(holdings: Holding[]): PortfolioSummary {
     assetClassBreakdown,
     macroBreakdown,
     holdingCount: holdings.length,
+    lastMarketRefresh,
+    marketFreshnessInfo,
   };
 }

@@ -114,6 +114,10 @@ export async function parseGrowwMfExcel(file: File | ArrayBuffer): Promise<Parse
       xirr: xirr,
       source: 'groww_mf',
       statement_date: statementDate,
+      metadata: {
+        price_updated_at: statementDate,
+        price_source: 'Groww Statement',
+      },
     });
   }
 

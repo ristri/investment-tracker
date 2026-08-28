@@ -152,6 +152,8 @@ export async function parseUsStocksExcel(
         broker_account: brokerAccount,
         holding_since: holdingSince,
         notes: knownInfo?.description,
+        price_updated_at: statementDate || getLocalTodayInputString(),
+        price_source: brokerName || 'IndMoney US',
       },
     };
 

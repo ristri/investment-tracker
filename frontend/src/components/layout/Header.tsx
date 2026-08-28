@@ -109,11 +109,34 @@ export function Header({
             {isPrivacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
 
+          {/* Market Freshness status tag on desktop */}
+          {summary?.marketFreshnessInfo && (
+            <div
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400"
+              title={`Market rates last updated: ${summary.marketFreshnessInfo.formattedExact} (${summary.marketFreshnessInfo.sourceLabel})`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                  summary.marketFreshnessInfo.staleness === 'fresh'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : summary.marketFreshnessInfo.staleness === 'moderate'
+                    ? 'bg-amber-400'
+                    : 'bg-zinc-500'
+                }`}
+              />
+              <span>Prices: <strong className="text-zinc-200 font-medium">{summary.marketFreshnessInfo.relativeTime}</strong></span>
+            </div>
+          )}
+
           {/* Refresh live prices */}
           <button
-            onClick={() => refreshPrices(false)}
+            onClick={() => refreshPrices(true)}
             disabled={isRefreshing}
-            title="Refresh Live Prices (Market hours 60m cache)"
+            title={
+              summary?.marketFreshnessInfo
+                ? `Market Rates: ${summary.marketFreshnessInfo.formattedExact} (${summary.marketFreshnessInfo.relativeTime}) • Click to Refresh`
+                : 'Refresh Live Prices'
+            }
             className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-all disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />

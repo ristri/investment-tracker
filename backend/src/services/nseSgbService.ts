@@ -236,7 +236,6 @@ export class NseSgbService {
    */
   static async getSgbQuote(identifier: string, forceRefresh: boolean = false): Promise<MarketQuote | null> {
     const list = await this.fetchAllSgbQuotes(forceRefresh);
-    if (!list || list.length === 0) return null;
 
     const raw = identifier.trim();
     const upper = raw.toUpperCase();
@@ -244,30 +243,30 @@ export class NseSgbService {
 
     // 1. Direct match by symbol
     const cleanSym = upper.replace('.NS', '').replace('SGB-', '').replace(/\s+/g, '');
-    let matched = list.find((item) => item.symbol === upper || item.symbol === cleanSym);
+    let matched = (list || []).find((item) => item.symbol === upper || item.symbol === cleanSym);
 
     // 2. Match by Known Series name mapping
     if (!matched) {
       for (const [key, nseSymbol] of Object.entries(KNOWN_SERIES_MAP)) {
         if (lower.includes(key)) {
-          matched = list.find((item) => item.symbol === nseSymbol);
+          matched = (list || []).find((item) => item.symbol === nseSymbol);
           if (matched) break;
         }
       }
     }
 
-    // 3. Match by Year and Tranche in bond name (e.g. "2031-III" -> SGBDE31III, "2032-IV" -> SGBFEB32IV)
+    // 3. Match by Year and Tranche in bond name (e.g. "2031-III", "2031SR-III", "2032-IV")
     if (!matched) {
-      const yearTrancheMatch = raw.match(/20(\d{2})[- ]([I|V|X]+)/i);
+      const yearTrancheMatch = raw.match(/20(\d{2}).*?(?:SR|SERIES|TRANCHE)?[- ]*([IVXLCDM]+)/i);
       if (yearTrancheMatch) {
         const yr = yearTrancheMatch[1]; // e.g. 31 or 32
         const tranche = yearTrancheMatch[2].toUpperCase(); // e.g. III or IV
-        matched = list.find((item) => item.symbol.includes(yr) && item.symbol.includes(tranche));
+        matched = (list || []).find((item) => item.symbol.includes(yr) && item.symbol.includes(tranche));
       }
     }
 
     // 4. Fuzzy search in symbol / series name
-    if (!matched) {
+    if (!matched && list && list.length > 0) {
       matched = list.find((item) =>
         item.series.toLowerCase().includes(lower) ||
         lower.includes(item.symbol.toLowerCase()) ||
@@ -275,9 +274,9 @@ export class NseSgbService {
       );
     }
 
-    // 5. Fallback: If no exact tranche matched, use the benchmark active SGB LTP (median of top traded SGBs)
-    const price = matched ? matched.ltp : (list[0]?.ltp || 16000);
-    const prevClose = matched ? matched.previousClose : (list[0]?.previousClose || price);
+    // 5. Fallback: If no exact tranche matched or list is empty, use benchmark active SGB LTP
+    const price = matched ? matched.ltp : (list?.[0]?.ltp || 16085);
+    const prevClose = matched ? matched.previousClose : (list?.[0]?.previousClose || price);
     const change = matched ? matched.change : 0;
     const changePercent = matched ? matched.changePercent : 0;
     const name = matched ? matched.name : `SGB (${raw})`;

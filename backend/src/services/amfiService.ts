@@ -1,7 +1,9 @@
 import { MarketQuote } from '@investment-tracker/shared';
+import { SymbolMappingService } from './symbolMappingService';
 
 // In-memory cache for fast worker execution (survives worker warm instances)
 const memoryCache = new Map<string, { quote: MarketQuote; expiresAt: number }>();
+const schemeNameMap = new Map<string, number>();
 const MF_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const inFlightMfPromises = new Map<string, Promise<MarketQuote | null>>();
 
@@ -25,15 +27,104 @@ export class AmfiService {
   }
 
   /**
+   * Resolve numeric scheme code from a mutual fund scheme name.
+   * Checks in-memory cache -> persistent D1 database -> AMFI Search API.
+   */
+  static async resolveSchemeCode(name: string, db?: any): Promise<number | null> {
+    if (!name) return null;
+    const cleanKey = name.trim().toLowerCase();
+
+    // 1. Check in-memory cache
+    if (schemeNameMap.has(cleanKey)) {
+      return schemeNameMap.get(cleanKey)!;
+    }
+
+    // 2. Check persistent D1 database
+    if (db) {
+      const fromDb = await SymbolMappingService.getResolvedSymbol(db, name);
+      if (fromDb && /^\d+$/.test(fromDb.trim())) {
+        const code = parseInt(fromDb.trim(), 10);
+        schemeNameMap.set(cleanKey, code);
+        return code;
+      }
+    }
+
+    const isDirect = cleanKey.includes('direct');
+    const isGrowth = cleanKey.includes('growth');
+
+    const cleanQuery = name
+      .replace(/Direct Plan/gi, '')
+      .replace(/Direct/gi, '')
+      .replace(/Growth/gi, '')
+      .replace(/Regular Plan/gi, '')
+      .replace(/IDCW/gi, '')
+      .replace(/Option/gi, '')
+      .replace(/-+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const results = await this.searchSchemes(cleanQuery);
+    if (results.length === 0) return null;
+
+    const matched =
+      results.find((s) => {
+        const sLower = s.schemeName.toLowerCase();
+        if (isDirect && isGrowth) return sLower.includes('direct') && sLower.includes('growth');
+        if (isDirect) return sLower.includes('direct');
+        if (isGrowth) return sLower.includes('growth');
+        return true;
+      }) || results[0];
+
+    if (matched?.schemeCode) {
+      schemeNameMap.set(cleanKey, matched.schemeCode);
+
+      // 3. Persist newly discovered mapping in D1 database
+      if (db) {
+        await SymbolMappingService.saveMapping(
+          db,
+          'mutual_fund',
+          name,
+          String(matched.schemeCode),
+          matched.schemeName,
+          'amfi'
+        );
+      }
+
+      return matched.schemeCode;
+    }
+
+    return null;
+  }
+
+  /**
+   * Get latest NAV by scheme code or scheme name
+   */
+  static async getNavForScheme(
+    schemeNameOrCode: string | number,
+    forceRefresh: boolean = false,
+    db?: any
+  ): Promise<MarketQuote | null> {
+    if (!schemeNameOrCode) return null;
+    const str = String(schemeNameOrCode).trim();
+    if (/^\d+$/.test(str)) {
+      return this.getNav(str, forceRefresh);
+    }
+
+    const schemeCode = await this.resolveSchemeCode(str, db);
+    if (!schemeCode) return null;
+    return this.getNav(schemeCode, forceRefresh);
+  }
+
+  /**
    * Get latest NAV by scheme code with in-flight deduplication & 24h cache
    */
-  static async getNav(schemeCode: number | string): Promise<MarketQuote | null> {
+  static async getNav(schemeCode: number | string, forceRefresh: boolean = false): Promise<MarketQuote | null> {
     const key = `mf_${schemeCode}`;
     const now = Date.now();
 
     // 1. Check cache
     const cached = memoryCache.get(key);
-    if (cached && cached.expiresAt > now) {
+    if (!forceRefresh && cached && cached.expiresAt > now) {
       return cached.quote;
     }
 

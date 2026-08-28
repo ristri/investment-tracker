@@ -176,6 +176,45 @@ export function AssetCategoryCards({
                     </span>
                   )}
                 </div>
+
+                {/* Price update staleness for market-rate assets */}
+                {data.isMarketRate && hasHoldings && data.priceUpdateInfo && (
+                  <div
+                    className="mt-2 pt-1.5 border-t border-zinc-800/40 flex items-center justify-between text-[10px] text-zinc-400"
+                    title={`Price Last Updated: ${data.priceUpdateInfo.formattedExact} (${data.priceUpdateInfo.sourceLabel})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                          data.priceUpdateInfo.staleness === 'fresh'
+                            ? 'bg-emerald-400 animate-pulse'
+                            : data.priceUpdateInfo.staleness === 'moderate'
+                            ? 'bg-amber-400'
+                            : 'bg-zinc-500'
+                        }`}
+                      />
+                      <span className="text-[10px] text-zinc-400">
+                        Price:{' '}
+                        <strong className="text-zinc-200 font-medium">
+                          {data.priceUpdateInfo.relativeTime}
+                        </strong>
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-zinc-500 font-mono truncate max-w-[70px]">
+                      {data.priceUpdateInfo.sourceLabel.split('/')[0].trim()}
+                    </span>
+                  </div>
+                )}
+
+                {/* Non-market asset classes indicator (EPF, PPF, FD) */}
+                {!data.isMarketRate && hasHoldings && (
+                  <div className="mt-2 pt-1.5 border-t border-zinc-800/40 flex items-center justify-between text-[10px] text-zinc-500">
+                    <span className="text-[10px]">
+                      {cat.key === 'fd' ? 'Accrued Daily' : cat.key === 'ppf' ? 'Statutory Fixed' : 'Govt PF Rate'}
+                    </span>
+                    <span className="text-[9px] text-zinc-600 font-mono">Fixed</span>
+                  </div>
+                )}
               </div>
             </button>
           );

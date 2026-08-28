@@ -9,6 +9,10 @@ import {
   getHoldingMacroSplit,
   getHoldingLiveValue,
   isMaturedFD,
+  isMarketRateAssetClass,
+  parseDateSafe,
+  getHoldingPriceUpdateInfo,
+  getAssetClassPriceUpdateInfo,
   Holding,
 } from '@investment-tracker/shared';
 
@@ -295,5 +299,244 @@ describe('Shared Investment Calculations', () => {
     expect(summary.totalInvested).toBe(37601);
     expect(summary.totalGain).toBe(1916);
     expect(summary.macroBreakdown.debt.value).toBe(39517);
+  });
+
+  it('correctly identifies market-rate vs fixed-income asset classes', () => {
+    // Market rate based asset classes
+    expect(isMarketRateAssetClass('stock')).toBe(true);
+    expect(isMarketRateAssetClass('mutual_fund')).toBe(true);
+    expect(isMarketRateAssetClass('us_stock')).toBe(true);
+    expect(isMarketRateAssetClass('sgb')).toBe(true);
+    expect(isMarketRateAssetClass('etf')).toBe(true);
+
+    // Non-market rate asset classes (Fixed Income / Statutory)
+    expect(isMarketRateAssetClass('epf')).toBe(false);
+    expect(isMarketRateAssetClass('ppf')).toBe(false);
+    expect(isMarketRateAssetClass('fd')).toBe(false);
+  });
+
+  it('safely parses diverse date and timestamp formats', () => {
+    // ISO string
+    const isoDate = parseDateSafe('2026-08-28T14:30:00.000Z');
+    expect(isoDate).not.toBeNull();
+    expect(isoDate?.getFullYear()).toBe(2026);
+
+    // SQLite timestamp
+    const sqlDate = parseDateSafe('2026-08-28 14:30:00');
+    expect(sqlDate).not.toBeNull();
+    expect(sqlDate?.getFullYear()).toBe(2026);
+
+    // DD-MM-YYYY (Groww statement format)
+    const ddmmyyyy = parseDateSafe('27-08-2026');
+    expect(ddmmyyyy).not.toBeNull();
+    expect(ddmmyyyy?.getDate()).toBe(27);
+    expect(ddmmyyyy?.getMonth()).toBe(7); // 0-indexed August = 7
+    expect(ddmmyyyy?.getFullYear()).toBe(2026);
+
+    // YYYY-MM-DD
+    const yyyymmdd = parseDateSafe('2026-08-26');
+    expect(yyyymmdd).not.toBeNull();
+    expect(yyyymmdd?.getDate()).toBe(26);
+    expect(yyyymmdd?.getMonth()).toBe(7);
+
+    // DD-MMM-YYYY (AMFI format)
+    const amfiDate = parseDateSafe('27-Aug-2026');
+    expect(amfiDate).not.toBeNull();
+    expect(amfiDate?.getDate()).toBe(27);
+    expect(amfiDate?.getMonth()).toBe(7);
+
+    // Invalid input
+    expect(parseDateSafe('')).toBeNull();
+    expect(parseDateSafe(null)).toBeNull();
+    expect(parseDateSafe('not-a-date')).toBeNull();
+  });
+
+  it('accurately determines holding price staleness levels (fresh, moderate, stale)', () => {
+    const fixedNow = new Date('2026-08-28T14:30:00.000Z');
+
+    // 1. Fresh Quote (10 minutes ago)
+    const freshStock: Holding = {
+      id: 10,
+      user_id: 1,
+      asset_class: 'stock',
+      name: 'Reliance Industries',
+      quantity: 10,
+      avg_buy_price: 2800,
+      invested_amount: 28000,
+      live_price: 3000,
+      live_value: 30000,
+      source: 'groww_stocks',
+      created_at: '2026-08-20',
+      updated_at: '2026-08-28T14:20:00.000Z',
+      metadata: {
+        price_updated_at: '2026-08-28T14:20:00.000Z',
+        price_source: 'NSE India',
+      },
+    };
+
+    const freshInfo = getHoldingPriceUpdateInfo(freshStock, fixedNow);
+    expect(freshInfo.isMarketRate).toBe(true);
+    expect(freshInfo.staleness).toBe('fresh');
+    expect(freshInfo.relativeTime).toBe('10m ago');
+    expect(freshInfo.sourceLabel).toBe('NSE India');
+
+    // 2. Moderate Quote (Yesterday's AMFI NAV)
+    const yesterdayMf: Holding = {
+      id: 11,
+      user_id: 1,
+      asset_class: 'mutual_fund',
+      name: 'Parag Parikh Flexi Cap Fund',
+      quantity: 100,
+      avg_buy_price: 70,
+      invested_amount: 7000,
+      statement_price: 85.5,
+      statement_value: 8550,
+      live_price: 85.5,
+      live_value: 8550,
+      source: 'groww_mf',
+      statement_date: '27-08-2026',
+      created_at: '2026-08-20',
+      updated_at: '2026-08-27',
+      metadata: {
+        price_updated_at: '27-08-2026',
+        price_source: 'AMFI NAV',
+      },
+    };
+
+    const moderateInfo = getHoldingPriceUpdateInfo(yesterdayMf, fixedNow);
+    expect(moderateInfo.isMarketRate).toBe(true);
+    expect(moderateInfo.staleness).toBe('moderate');
+    expect(moderateInfo.relativeTime).toBe('Yesterday');
+    expect(moderateInfo.sourceLabel).toBe('AMFI NAV');
+
+    // 3. Stale Quote (Groww Statement from 5 days ago)
+    const staleStock: Holding = {
+      id: 12,
+      user_id: 1,
+      asset_class: 'stock',
+      name: 'Infosys',
+      quantity: 20,
+      avg_buy_price: 1500,
+      invested_amount: 30000,
+      statement_price: 1800,
+      statement_value: 36000,
+      live_price: 1800,
+      live_value: 36000,
+      source: 'groww_stocks',
+      statement_date: '23-08-2026',
+      created_at: '2026-08-23',
+      updated_at: '2026-08-23',
+      metadata: {
+        price_updated_at: '23-08-2026',
+        price_source: 'Groww Statement',
+      },
+    };
+
+    const staleInfo = getHoldingPriceUpdateInfo(staleStock, fixedNow);
+    expect(staleInfo.isMarketRate).toBe(true);
+    expect(staleInfo.staleness).toBe('stale');
+    expect(staleInfo.relativeTime).toBe('5d ago');
+
+    // 4. Non-Market Asset (PPF)
+    const ppfHolding: Holding = {
+      id: 13,
+      user_id: 1,
+      asset_class: 'ppf',
+      name: 'PPF Account',
+      quantity: 1,
+      avg_buy_price: 150000,
+      invested_amount: 150000,
+      statement_price: 150000,
+      statement_value: 150000,
+      source: 'manual',
+      created_at: '2026-01-01',
+      updated_at: '2026-01-01',
+    };
+
+    const ppfInfo = getHoldingPriceUpdateInfo(ppfHolding, fixedNow);
+    expect(ppfInfo.isMarketRate).toBe(false);
+    expect(ppfInfo.relativeTime).toBe('-');
+  });
+
+  it('aggregates asset class price update metadata and portfolio-wide market freshness in computePortfolioSummary', () => {
+    const fixedNow = new Date('2026-08-28T14:30:00.000Z');
+
+    const holdings: Holding[] = [
+      {
+        id: 1,
+        user_id: 1,
+        asset_class: 'stock',
+        name: 'TCS',
+        quantity: 5,
+        avg_buy_price: 3500,
+        invested_amount: 17500,
+        live_price: 4200,
+        live_value: 21000,
+        source: 'groww_stocks',
+        created_at: '2026-08-20',
+        updated_at: '2026-08-28T14:15:00.000Z',
+        metadata: {
+          price_updated_at: '2026-08-28T14:15:00.000Z',
+          price_source: 'NSE India',
+        },
+      },
+      {
+        id: 2,
+        user_id: 1,
+        asset_class: 'us_stock',
+        name: 'Vanguard 500 ETF (VOO)',
+        symbol: 'VOO',
+        quantity: 2,
+        avg_buy_price: 45000,
+        invested_amount: 90000,
+        live_price: 52000,
+        live_value: 104000,
+        source: 'indmoney_us_stocks',
+        created_at: '2026-08-20',
+        updated_at: '2026-08-28T14:25:00.000Z',
+        metadata: {
+          price_updated_at: '2026-08-28T14:25:00.000Z',
+          price_source: 'Yahoo Finance',
+        },
+      },
+      {
+        id: 3,
+        user_id: 1,
+        asset_class: 'epf',
+        name: 'EPFO Passbook',
+        quantity: 1,
+        avg_buy_price: 50000,
+        invested_amount: 50000,
+        statement_value: 55000,
+        source: 'epf_passbook',
+        created_at: '2026-08-20',
+        updated_at: '2026-08-20',
+      },
+    ];
+
+    const summary = computePortfolioSummary(holdings, fixedNow);
+
+    // 1. Check Stock Breakdown Item
+    const stockBreakdown = summary.assetClassBreakdown.stock;
+    expect(stockBreakdown.isMarketRate).toBe(true);
+    expect(stockBreakdown.priceUpdateInfo).not.toBeNull();
+    expect(stockBreakdown.priceUpdateInfo?.staleness).toBe('fresh');
+    expect(stockBreakdown.priceUpdateInfo?.relativeTime).toBe('15m ago');
+
+    // 2. Check US Stock Breakdown Item
+    const usStockBreakdown = summary.assetClassBreakdown.us_stock;
+    expect(usStockBreakdown.isMarketRate).toBe(true);
+    expect(usStockBreakdown.priceUpdateInfo?.relativeTime).toBe('5m ago');
+
+    // 3. Check EPF Breakdown Item (non-market rate)
+    const epfBreakdown = summary.assetClassBreakdown.epf;
+    expect(epfBreakdown.isMarketRate).toBe(false);
+    expect(epfBreakdown.priceUpdateInfo).toBeNull();
+
+    // 4. Check Portfolio-Wide Market Freshness (should match the latest US stock update: 5m ago)
+    expect(summary.lastMarketRefresh).toBe('2026-08-28T14:25:00.000Z');
+    expect(summary.marketFreshnessInfo).not.toBeNull();
+    expect(summary.marketFreshnessInfo?.relativeTime).toBe('5m ago');
+    expect(summary.marketFreshnessInfo?.staleness).toBe('fresh');
   });
 });

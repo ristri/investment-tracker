@@ -113,6 +113,10 @@ export interface HoldingMetadata {
 
   // Custom Notes
   notes?: string;
+
+  // Market Price & Staleness Metadata
+  price_updated_at?: string;
+  price_source?: string;
 }
 
 export interface Holding {
@@ -138,6 +142,7 @@ export interface Holding {
   xirr?: number | null;
   source: HoldingSource;
   statement_date?: string | null;
+  price_updated_at?: string | null;
   metadata?: HoldingMetadata;
   metadata_json?: string | null;
   created_at: string;
@@ -204,6 +209,29 @@ export interface CreateSnapshotInput {
   snapshot_date?: string;
 }
 
+export type PriceStaleness = 'fresh' | 'moderate' | 'stale';
+
+export interface PriceUpdateInfo {
+  timestamp: string | null;
+  relativeTime: string;
+  formattedExact: string;
+  staleness: PriceStaleness;
+  sourceLabel: string;
+  isMarketRate: boolean;
+}
+
+export interface AssetClassBreakdownItem {
+  invested: number;
+  current: number;
+  gain: number;
+  gainPercent: number;
+  count: number;
+  allocationPercent: number;
+  isMarketRate: boolean;
+  priceUpdatedAt?: string | null;
+  priceUpdateInfo?: PriceUpdateInfo | null;
+}
+
 export interface PortfolioSummary {
   totalNetWorth: number;
   totalInvested: number;
@@ -211,20 +239,15 @@ export interface PortfolioSummary {
   totalGainPercent: number;
   dayChange?: number;
   dayChangePercent?: number;
-  assetClassBreakdown: Record<AssetClass, {
-    invested: number;
-    current: number;
-    gain: number;
-    gainPercent: number;
-    count: number;
-    allocationPercent: number;
-  }>;
+  assetClassBreakdown: Record<AssetClass, AssetClassBreakdownItem>;
   macroBreakdown: Record<MacroAssetClass, {
     value: number;
     percentage: number;
   }>;
   lastSnapshot?: NetWorthSnapshot | null;
   holdingCount: number;
+  lastMarketRefresh?: string | null;
+  marketFreshnessInfo?: PriceUpdateInfo | null;
 }
 
 export interface MarketQuote {
