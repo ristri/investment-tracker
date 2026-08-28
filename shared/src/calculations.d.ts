@@ -13,7 +13,7 @@ export declare function formatUSD(amount: number | null | undefined): string;
 export declare function formatPercent(percent: number | null | undefined, includeSign?: boolean): string;
 /**
  * Formats a UTC ISO string or Date into user's local readable date and time.
- * Example: 2026-08-27T12:16:00.000Z -> "27 Aug 2026, 05:46 PM"
+ * Example: 2026-08-27T12:16:00.000Z -> "27 Aug 2026, 05:46 PM IST"
  */
 export declare function formatLocalDateTime(dateInput?: string | Date | null): string;
 /**
@@ -23,7 +23,7 @@ export declare function formatLocalDateTime(dateInput?: string | Date | null): s
 export declare function formatLocalDate(dateInput?: string | Date | null): string;
 /**
  * Formats a UTC ISO string or Date into user's local time only.
- * Example: "05:46 PM"
+ * Example: "05:46 PM IST"
  */
 export declare function formatLocalTime(dateInput?: string | Date | null): string;
 /**

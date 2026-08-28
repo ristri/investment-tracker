@@ -55,7 +55,7 @@ function getUserTimeZone() {
 }
 /**
  * Formats a UTC ISO string or Date into user's local readable date and time.
- * Example: 2026-08-27T12:16:00.000Z -> "27 Aug 2026, 05:46 PM"
+ * Example: 2026-08-27T12:16:00.000Z -> "27 Aug 2026, 05:46 PM IST"
  */
 export function formatLocalDateTime(dateInput) {
     if (!dateInput)
@@ -64,8 +64,9 @@ export function formatLocalDateTime(dateInput) {
         const d = typeof dateInput === 'string' ? parseDateSafe(dateInput) : dateInput;
         if (!d || isNaN(d.getTime()))
             return String(dateInput);
-        return d.toLocaleString('en-IN', {
-            timeZone: getUserTimeZone(),
+        const tz = getUserTimeZone();
+        const formatted = d.toLocaleString('en-IN', {
+            timeZone: tz,
             day: '2-digit',
             month: 'short',
             year: 'numeric',
@@ -73,6 +74,8 @@ export function formatLocalDateTime(dateInput) {
             minute: '2-digit',
             hour12: true,
         });
+        const tzLabel = tz === 'Asia/Kolkata' ? 'IST' : tz;
+        return `${formatted} ${tzLabel}`;
     }
     catch {
         return String(dateInput);
@@ -102,7 +105,7 @@ export function formatLocalDate(dateInput) {
 }
 /**
  * Formats a UTC ISO string or Date into user's local time only.
- * Example: "05:46 PM"
+ * Example: "05:46 PM IST"
  */
 export function formatLocalTime(dateInput) {
     if (!dateInput)
@@ -111,12 +114,15 @@ export function formatLocalTime(dateInput) {
         const d = typeof dateInput === 'string' ? parseDateSafe(dateInput) : dateInput;
         if (!d || isNaN(d.getTime()))
             return String(dateInput);
-        return d.toLocaleTimeString('en-IN', {
-            timeZone: getUserTimeZone(),
+        const tz = getUserTimeZone();
+        const formatted = d.toLocaleTimeString('en-IN', {
+            timeZone: tz,
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
         });
+        const tzLabel = tz === 'Asia/Kolkata' ? 'IST' : tz;
+        return `${formatted} ${tzLabel}`;
     }
     catch {
         return String(dateInput);
