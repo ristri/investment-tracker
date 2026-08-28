@@ -42,6 +42,17 @@ export function formatPercent(percent, includeSign = true) {
     const sign = includeSign && percent > 0 ? '+' : '';
     return `${sign}${percent.toFixed(2)}%`;
 }
+function getUserTimeZone() {
+    try {
+        if (typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function') {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (tz && tz !== 'UTC')
+                return tz;
+        }
+    }
+    catch { }
+    return 'Asia/Kolkata';
+}
 /**
  * Formats a UTC ISO string or Date into user's local readable date and time.
  * Example: 2026-08-27T12:16:00.000Z -> "27 Aug 2026, 05:46 PM"
@@ -54,6 +65,7 @@ export function formatLocalDateTime(dateInput) {
         if (!d || isNaN(d.getTime()))
             return String(dateInput);
         return d.toLocaleString('en-IN', {
+            timeZone: getUserTimeZone(),
             day: '2-digit',
             month: 'short',
             year: 'numeric',
@@ -78,6 +90,7 @@ export function formatLocalDate(dateInput) {
         if (!d || isNaN(d.getTime()))
             return String(dateInput);
         return d.toLocaleDateString('en-IN', {
+            timeZone: getUserTimeZone(),
             day: '2-digit',
             month: 'short',
             year: 'numeric',
@@ -99,6 +112,7 @@ export function formatLocalTime(dateInput) {
         if (!d || isNaN(d.getTime()))
             return String(dateInput);
         return d.toLocaleTimeString('en-IN', {
+            timeZone: getUserTimeZone(),
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,

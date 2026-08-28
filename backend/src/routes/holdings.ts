@@ -56,7 +56,11 @@ holdings.get('/', async (c) => {
 
   items = await Promise.all(
     items.map(async (h) => {
-      // 1. Sovereign Gold Bonds (NSE live traded price)
+      // If holding already has live price in D1, preserve database cache & true price_updated_at!
+      if (h.live_price !== null && h.live_price !== undefined && h.live_price > 0) {
+        return h;
+      }
+
       // 1. Sovereign Gold Bonds (NSE live traded price)
       if (h.asset_class === 'sgb') {
         try {

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import {
@@ -5,6 +6,7 @@ import {
   PortfolioSummary,
   CreateHoldingInput,
   BatchImportRequest,
+  computePortfolioSummary,
 } from '@investment-tracker/shared';
 import { toast } from 'sonner';
 
@@ -19,6 +21,14 @@ export function useHoldings() {
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  const rawHoldings = holdingsQuery.data?.holdings || [];
+
+  // Compute portfolio summary and freshness relative to local browser clock and timezone
+  const summary = useMemo(() => {
+    if (rawHoldings.length === 0) return holdingsQuery.data?.summary;
+    return computePortfolioSummary(rawHoldings);
+  }, [rawHoldings, holdingsQuery.data?.summary]);
 
   const addHoldingMutation = useMutation({
     mutationFn: async (newHolding: CreateHoldingInput) => {
