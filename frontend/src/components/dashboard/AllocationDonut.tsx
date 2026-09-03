@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { PortfolioSummary, formatINR } from '@investment-tracker/shared';
 import { PieChart as PieIcon } from 'lucide-react';
+import { Panel, PanelHeader, PanelTitle } from '@/components/ui/panel';
+import { Progress } from '@/components/ui/progress';
 
 interface AllocationDonutProps {
   summary?: PortfolioSummary;
@@ -22,8 +24,8 @@ const ASSET_COLORS: Record<string, string> = {
 const ASSET_LABELS: Record<string, string> = {
   stock: 'Indian Stocks',
   mutual_fund: 'Mutual Funds',
-  us_stock: 'US Stocks & ETFs',
-  sgb: 'Sovereign Gold Bonds',
+  us_stock: 'US Equities',
+  sgb: 'SGB (Gold)',
   etf: 'Indian ETFs',
   epf: 'EPF',
   ppf: 'PPF',
@@ -40,15 +42,15 @@ export function AllocationDonut({ summary, isPrivacyMode = false }: AllocationDo
 
   if (!summary || summary.totalNetWorth === 0) {
     return (
-      <div className="rounded-2xl bg-zinc-900/90 border border-zinc-800/80 p-8 text-center text-zinc-500 text-sm shadow-xl">
-        <PieIcon className="h-8 w-8 mx-auto text-zinc-600 mb-2" />
+      <Panel className="p-8 text-center text-muted-foreground text-sm">
+        <PieIcon className="h-8 w-8 mx-auto text-muted-foreground/60 mb-2" />
         <span>No asset allocation data yet.</span>
-        <p className="text-xs text-zinc-600 mt-1">Import a statement or add assets to visualize</p>
-      </div>
+        <p className="text-xs text-muted-foreground/60 mt-1">Import a statement or add assets to visualize</p>
+      </Panel>
     );
   }
 
-  // 8 Asset Categories Distribution
+  // Active asset classes distribution
   const assetClassData = Object.entries(summary.assetClassBreakdown)
     .filter(([_, val]) => val.current > 0)
     .map(([key, val]) => ({
@@ -69,13 +71,13 @@ export function AllocationDonut({ summary, isPrivacyMode = false }: AllocationDo
     if (active && payload && payload.length) {
       const d = payload[0].payload;
       return (
-        <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl shadow-xl text-xs space-y-1">
-          <p className="font-bold text-white">{d.name}</p>
-          <p className="text-zinc-300">
-            Current: <span className="font-semibold text-emerald-400">{formatVal(d.value)}</span>
+        <div className="bg-popover border border-surface-border p-3 rounded-card shadow-xl text-xs space-y-1 text-popover-foreground">
+          <p className="font-bold">{d.name}</p>
+          <p className="text-muted-foreground">
+            Valuation: <span className="font-bold text-primary tnum">{formatVal(d.value)}</span>
           </p>
-          <p className="text-zinc-400">
-            Allocation: <span className="font-semibold text-white">{d.percentage.toFixed(1)}%</span>
+          <p className="text-muted-foreground">
+            Allocation: <span className="font-bold text-foreground tnum">{d.percentage.toFixed(1)}%</span>
           </p>
         </div>
       );
@@ -84,22 +86,30 @@ export function AllocationDonut({ summary, isPrivacyMode = false }: AllocationDo
   };
 
   return (
-    <div className="rounded-2xl bg-zinc-900/90 border border-zinc-800/80 p-5 sm:p-6 shadow-xl space-y-6">
-      
+    <Panel className="space-y-6">
+      <PanelHeader className="mb-0">
+        <PanelTitle sub="Distribution across macro classes and specific instruments">
+          Portfolio Asset Allocation
+        </PanelTitle>
+        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground">
+          {assetClassData.length} Asset {assetClassData.length === 1 ? 'Class' : 'Classes'}
+        </span>
+      </PanelHeader>
+
       {/* Top Section: Macro Allocation Progress Bar & Metric Badges */}
-      <div className="bg-zinc-950/80 border border-zinc-800/80 p-4 rounded-2xl space-y-3">
+      <div className="card-well p-4 space-y-3">
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white uppercase tracking-wider">Macro Asset Split</span>
-            <span className="text-[10px] text-zinc-500 hidden sm:inline">• 100% Portfolio Balance</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-foreground">Macro Asset Split</span>
+            <span className="text-[10px] text-muted-foreground hidden sm:inline">• 100% Portfolio Balance</span>
           </div>
-          <span className="text-xs font-mono text-zinc-400">
-            {assetClassData.length} Active Asset {assetClassData.length === 1 ? 'Class' : 'Classes'}
+          <span className="text-xs text-muted-foreground tnum">
+            {equityPct.toFixed(0)}% Eq • {debtPct.toFixed(0)}% Debt • {goldPct.toFixed(0)}% Gold
           </span>
         </div>
 
         {/* Stacked Macro Bar */}
-        <div className="w-full bg-zinc-900 h-3.5 rounded-full overflow-hidden flex shadow-inner">
+        <div className="w-full bg-muted h-3.5 rounded-full overflow-hidden flex shadow-inner">
           {equityPct > 0 && (
             <div
               className="bg-emerald-500 h-full transition-all duration-500"
@@ -124,53 +134,53 @@ export function AllocationDonut({ summary, isPrivacyMode = false }: AllocationDo
         </div>
 
         {/* Macro Pill Legend */}
-        <div className="grid grid-cols-3 gap-2.5 pt-1">
-          <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl flex items-center justify-between text-xs">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-1">
+          <div className="card-surface px-3 py-2 rounded-tile flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 flex-shrink-0" />
-              <span className="text-zinc-200 font-medium text-xs truncate">Equity</span>
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="font-semibold text-xs truncate text-foreground">Equity</span>
             </div>
-            <div className="text-right font-mono ml-1">
-              <span className="font-bold text-emerald-400 text-xs sm:text-sm">{equityPct.toFixed(1)}%</span>
-              <span className="text-zinc-500 text-[10px] block font-normal">{formatVal(summary.macroBreakdown.equity.value, true)}</span>
+            <div className="text-right tnum ml-1">
+              <span className="font-bold text-emerald-500 text-xs sm:text-sm">{equityPct.toFixed(1)}%</span>
+              <span className="text-muted-foreground text-[10px] block font-normal">{formatVal(summary.macroBreakdown.equity.value, true)}</span>
             </div>
           </div>
 
-          <div className="bg-blue-500/10 border border-blue-500/20 px-3 py-2 rounded-xl flex items-center justify-between text-xs">
+          <div className="card-surface px-3 py-2 rounded-tile flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="h-2.5 w-2.5 rounded-full bg-blue-400 flex-shrink-0" />
-              <span className="text-zinc-200 font-medium text-xs truncate">Debt</span>
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shrink-0" />
+              <span className="font-semibold text-xs truncate text-foreground">Debt</span>
             </div>
-            <div className="text-right font-mono ml-1">
-              <span className="font-bold text-blue-400 text-xs sm:text-sm">{debtPct.toFixed(1)}%</span>
-              <span className="text-zinc-500 text-[10px] block font-normal">{formatVal(summary.macroBreakdown.debt.value, true)}</span>
+            <div className="text-right tnum ml-1">
+              <span className="font-bold text-blue-500 text-xs sm:text-sm">{debtPct.toFixed(1)}%</span>
+              <span className="text-muted-foreground text-[10px] block font-normal">{formatVal(summary.macroBreakdown.debt.value, true)}</span>
             </div>
           </div>
 
-          <div className="bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl flex items-center justify-between text-xs">
+          <div className="card-surface px-3 py-2 rounded-tile flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400 flex-shrink-0" />
-              <span className="text-zinc-200 font-medium text-xs truncate">Gold</span>
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0" />
+              <span className="font-semibold text-xs truncate text-foreground">Gold</span>
             </div>
-            <div className="text-right font-mono ml-1">
-              <span className="font-bold text-amber-400 text-xs sm:text-sm">{goldPct.toFixed(1)}%</span>
-              <span className="text-zinc-500 text-[10px] block font-normal">{formatVal(summary.macroBreakdown.gold.value, true)}</span>
+            <div className="text-right tnum ml-1">
+              <span className="font-bold text-amber-500 text-xs sm:text-sm">{goldPct.toFixed(1)}%</span>
+              <span className="text-muted-foreground text-[10px] block font-normal">{formatVal(summary.macroBreakdown.gold.value, true)}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Center Section: Large & Aesthetic 8-Category Donut Chart */}
-      <div className="flex flex-col items-center justify-center space-y-4">
-        <div className="h-72 sm:h-80 w-full relative flex items-center justify-center">
+      {/* Donut Chart & Legend */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+        <div className="md:col-span-6 h-64 sm:h-72 w-full relative flex items-center justify-center">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={assetClassData}
                 cx="50%"
                 cy="50%"
-                innerRadius={92}
-                outerRadius={135}
+                innerRadius={78}
+                outerRadius={114}
                 paddingAngle={3}
                 dataKey="value"
                 onMouseEnter={(_, idx) => setHoveredSlice(assetClassData[idx])}
@@ -180,9 +190,8 @@ export function AllocationDonut({ summary, isPrivacyMode = false }: AllocationDo
                   <Cell
                     key={`cell-${entry.key}`}
                     fill={entry.color}
-                    stroke="rgba(24, 24, 27, 0.95)"
-                    strokeWidth={3}
-                    className="transition-all duration-200 hover:opacity-85 cursor-pointer"
+                    stroke="transparent"
+                    className="cursor-pointer transition-opacity hover:opacity-85"
                   />
                 ))}
               </Pie>
@@ -190,52 +199,60 @@ export function AllocationDonut({ summary, isPrivacyMode = false }: AllocationDo
             </PieChart>
           </ResponsiveContainer>
 
-          {/* Dynamic Center Label inside Large Donut */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
-            <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold truncate max-w-[160px]">
-              {hoveredSlice ? hoveredSlice.name : 'Active Net Worth'}
-            </span>
-            <span className="text-xl sm:text-2xl font-black text-white font-mono mt-0.5 tracking-tight">
-              {hoveredSlice ? `${hoveredSlice.percentage.toFixed(1)}%` : formatVal(summary.totalNetWorth, true)}
-            </span>
+          {/* Center Donut Label */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center p-2">
             {hoveredSlice ? (
-              <span className="text-xs text-zinc-400 font-mono mt-0.5">
-                {formatVal(hoveredSlice.value)}
-              </span>
+              <>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate max-w-[120px]">
+                  {hoveredSlice.name}
+                </span>
+                <span className="text-lg sm:text-xl font-extrabold text-foreground tnum mt-0.5">
+                  {formatVal(hoveredSlice.value, true)}
+                </span>
+                <span className="text-xs font-bold text-primary tnum">
+                  {hoveredSlice.percentage.toFixed(1)}%
+                </span>
+              </>
             ) : (
-              <span className="text-[10px] text-zinc-500 font-sans mt-0.5">
-                Across 8 Categories
-              </span>
+              <>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Net Worth
+                </span>
+                <span className="text-lg sm:text-xl font-extrabold text-foreground tnum mt-0.5">
+                  {formatVal(summary.totalNetWorth, true)}
+                </span>
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  100% Total
+                </span>
+              </>
             )}
           </div>
         </div>
 
-        {/* Lightweight Horizontal Legend Pills (No duplication of card values) */}
-        <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl mx-auto pt-1">
+        {/* Legend grid */}
+        <div className="md:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {assetClassData.map((item) => (
             <div
               key={item.key}
               onMouseEnter={() => setHoveredSlice(item)}
               onMouseLeave={() => setHoveredSlice(null)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer ${
-                hoveredSlice?.key === item.key
-                  ? 'bg-zinc-800 border-zinc-500 text-white shadow-md scale-105'
-                  : 'bg-zinc-950/70 border-zinc-800/80 text-zinc-300 hover:border-zinc-700'
-              }`}
+              className="flex items-center justify-between p-2.5 rounded-tile card-surface hover:border-primary/40 transition-colors cursor-pointer text-xs"
             >
-              <span
-                className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: item.color }}
-              />
-              <span className="font-medium text-[11px]">{item.name}</span>
-              <span className="font-bold text-white font-mono text-[11px] ml-0.5">
-                {item.percentage.toFixed(1)}%
-              </span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="h-2.5 w-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="font-semibold text-foreground truncate">{item.name}</span>
+              </div>
+              <div className="text-right shrink-0 tnum ml-2">
+                <span className="font-bold text-foreground block">{formatVal(item.value, true)}</span>
+                <span className="text-[10px] text-muted-foreground">{item.percentage.toFixed(1)}%</span>
+              </div>
             </div>
           ))}
         </div>
       </div>
-
-    </div>
+    </Panel>
   );
 }

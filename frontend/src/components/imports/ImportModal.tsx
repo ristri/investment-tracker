@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UploadCloud,
   FileSpreadsheet,
   FileText,
   CheckCircle2,
   AlertCircle,
-  X,
   Loader2,
   Sparkles,
 } from 'lucide-react';
@@ -17,18 +16,25 @@ import { useHoldings } from '../../hooks/useHoldings';
 import { api } from '../../lib/api';
 import { CreateHoldingInput, formatINR } from '@investment-tracker/shared';
 import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type StatementType = 'auto' | 'groww_stocks' | 'groww_mf' | 'epf_pdf' | 'indmoney_us_stocks';
-
 export function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const { batchImport, isImporting } = useHoldings();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [statementType, setStatementType] = useState<StatementType>('auto');
   const [parsedHoldings, setParsedHoldings] = useState<CreateHoldingInput[]>([]);
   const [detectedType, setDetectedType] = useState<'groww_stocks' | 'groww_mf' | 'epf_passbook' | 'epf_pdf' | 'indmoney_us_stocks' | 'us_stocks' | null>(null);
   const [liveUsdRate, setLiveUsdRate] = useState<number>(88.0);
@@ -39,7 +45,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Fetch live exchange rate on open
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       api.get<{ pair: string; rate: number }>('/market/exchange-rate')
         .then((res) => {
@@ -50,8 +56,6 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
         .catch(() => {});
     }
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const handleFileChange = async (file: File) => {
     setSelectedFile(file);
@@ -73,12 +77,10 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
               setParsedHoldings(result.holdings);
               setDetectedType('indmoney_us_stocks');
               setStatementDate(result.statementDate);
-              setMetadataSummary(`Detected US Stocks statement (${result.brokerName || 'US Broker'}) with ${result.holdings.length} scrips. Total: $${result.totalValueUsd.toFixed(2)} (${formatINR(result.totalValueInr)}) @ ₹${liveUsdRate.toFixed(2)}/USD`);
+              setMetadataSummary(`Detected US Equities report with ${result.holdings.length} scrips. Total: $${result.totalValueUsd.toFixed(2)} (${formatINR(result.totalValueInr)}) @ ₹${liveUsdRate.toFixed(2)}/USD`);
               return;
             }
-          } catch {
-            // fallback to others
-          }
+          } catch {}
         }
 
         // 2. Try Groww MF
@@ -104,7 +106,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
                 setParsedHoldings(result.holdings);
                 setDetectedType('indmoney_us_stocks');
                 setStatementDate(result.statementDate);
-                setMetadataSummary(`Detected US Stocks statement with ${result.holdings.length} scrips. Total: $${result.totalValueUsd.toFixed(2)} (${formatINR(result.totalValueInr)})`);
+                setMetadataSummary(`Detected US Stocks report with ${result.holdings.length} scrips. Total: $${result.totalValueUsd.toFixed(2)} (${formatINR(result.totalValueInr)})`);
                 return;
               }
             } catch {}
@@ -122,7 +124,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
         setParsedHoldings([result.holding]);
         setDetectedType('epf_passbook');
         setStatementDate(result.asOnDate || result.financialYear);
-        setMetadataSummary(`Detected EPFO Passbook for ${result.establishmentName || result.memberName || 'EPF account'}. Balance: ${formatINR(result.totalEpfBalance)}`);
+        setMetadataSummary(`Detected EPFO Member Passbook for ${result.establishmentName || result.memberName || 'EPF account'}. Balance: ${formatINR(result.totalEpfBalance)}`);
       } else {
         throw new Error('Unsupported file format. Please upload .xlsx, .xls or .pdf');
       }
@@ -156,12 +158,9 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
         holdings: parsedHoldings,
       });
       onClose();
-      // Reset
       setSelectedFile(null);
       setParsedHoldings([]);
-    } catch (err) {
-      // Error handled by mutation hook
-    }
+    } catch (err) {}
   };
 
   const totalInvested = parsedHoldings.reduce((acc, h) => acc + (h.invested_amount || 0), 0);
@@ -169,40 +168,34 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const totalGain = totalValue - totalInvested;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md p-0 sm:p-4 overflow-y-auto">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full p-5 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl my-0 sm:my-8 max-h-[90vh] overflow-y-auto">
-        
+    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-2xl p-5 sm:p-6 space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-tile bg-primary/15 text-primary border border-primary/20 shrink-0">
               <UploadCloud className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-white">Import Investment Statement</h3>
-              <p className="text-xs text-zinc-400">
-                Groww Stocks (.xlsx), Groww Mutual Funds (.xlsx), or EPFO Passbook (.pdf)
-              </p>
+              <DialogTitle>Import Investment Statement</DialogTitle>
+              <DialogDescription>
+                Client-side parsing for Groww Stocks, Groww Mutual Funds, US Stocks, or EPFO Passbooks.
+              </DialogDescription>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Drag & Drop Area */}
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${
-            selectedFile
-              ? 'border-emerald-500/50 bg-emerald-500/5'
-              : 'border-zinc-700 hover:border-zinc-500 bg-zinc-950/60'
-          }`}
           onClick={() => document.getElementById('file-upload-input')?.click()}
+          className={cn(
+            'border-2 border-dashed rounded-card p-6 sm:p-8 text-center transition-all cursor-pointer select-none',
+            selectedFile
+              ? 'border-primary/50 bg-primary/5'
+              : 'border-surface-border hover:border-primary/40 bg-muted/30 hover:bg-muted/50'
+          )}
         >
           <input
             id="file-upload-input"
@@ -216,20 +209,20 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
             }}
           />
 
-          <div className="flex flex-col items-center justify-center space-y-3">
-            <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300">
+          <div className="flex flex-col items-center justify-center space-y-2.5">
+            <div className="p-3 rounded-tile bg-card border border-surface-border text-foreground shadow-sm">
               {selectedFile?.name.endsWith('.pdf') ? (
-                <FileText className="h-8 w-8 text-purple-400" />
+                <FileText className="h-7 w-7 text-brand-tertiary-ink" />
               ) : (
-                <FileSpreadsheet className="h-8 w-8 text-emerald-400" />
+                <FileSpreadsheet className="h-7 w-7 text-primary" />
               )}
             </div>
             <div>
-              <p className="text-sm font-semibold text-zinc-200">
-                {selectedFile ? selectedFile.name : 'Click to browse or drag & drop report here'}
+              <p className="text-sm font-bold text-foreground">
+                {selectedFile ? selectedFile.name : 'Click to select or drag & drop statement here'}
               </p>
-              <p className="text-xs text-zinc-500 mt-1">
-                Supports Excel statements from Groww and EPFO Passbook PDFs
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Accepts .xlsx, .xls, and .pdf files
               </p>
             </div>
           </div>
@@ -237,107 +230,104 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
 
         {/* Parsing Indicator */}
         {isParsing && (
-          <div className="flex items-center justify-center gap-2 py-4 text-xs text-zinc-400">
-            <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-            <span>Parsing file contents client-side...</span>
+          <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>Parsing file client-side (no data leaves your machine)...</span>
           </div>
         )}
 
-        {/* Error State */}
+        {/* Error Alert */}
         {error && (
-          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <div className="p-3 rounded-tile bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
-        {/* Parsed Preview */}
-        {parsedHoldings.length > 0 && (
-          <div className="space-y-3 pt-2">
-            <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {metadataSummary || `Successfully parsed ${parsedHoldings.length} holdings`}
+        {/* Success Preview */}
+        {parsedHoldings.length > 0 && !isParsing && (
+          <div className="space-y-3">
+            <div className="p-3.5 rounded-tile bg-primary/10 border border-primary/20 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-foreground">
+                <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                <span>Successfully extracted {parsedHoldings.length} holdings!</span>
+              </div>
+              {metadataSummary && <p className="text-muted-foreground text-[11px] pl-5.5">{metadataSummary}</p>}
+            </div>
+
+            {/* Financial Summary Pill */}
+            <div className="grid grid-cols-3 gap-2.5 p-3 rounded-tile card-well text-xs tnum">
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold block">Total Invested</span>
+                <span className="font-bold text-foreground">{formatINR(totalInvested)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold block">Closing Valuation</span>
+                <span className="font-extrabold text-foreground">{formatINR(totalValue)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold block">Statement Return</span>
+                <span className={cn('font-bold', totalGain >= 0 ? 'text-emerald-500' : 'text-destructive')}>
+                  {totalGain >= 0 ? '+' : ''}{formatINR(totalGain)}
                 </span>
-                {statementDate && (
-                  <span className="text-zinc-500 font-mono text-[11px]">Date: {statementDate}</span>
-                )}
-              </div>
-
-              {/* Value Summary Bar */}
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
-                <div>
-                  <span className="text-[10px] uppercase text-zinc-500 font-medium">Invested</span>
-                  <p className="font-bold text-zinc-200 font-mono">{formatINR(totalInvested)}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase text-zinc-500 font-medium">Closing Value</span>
-                  <p className="font-bold text-white font-mono">{formatINR(totalValue)}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase text-zinc-500 font-medium">Gain / P&L</span>
-                  <p className={`font-bold font-mono ${totalGain >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {formatINR(totalGain)}
-                  </p>
-                </div>
               </div>
             </div>
 
-            {/* Holdings list snippet */}
-            <div className="max-h-40 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800/60 text-xs">
-              {parsedHoldings.slice(0, 8).map((h, i) => (
-                <div key={i} className="py-2 px-3 flex items-center justify-between hover:bg-zinc-800/30">
-                  <div className="truncate max-w-[280px]">
-                    <span className="font-medium text-zinc-200 truncate">{h.name}</span>
-                    <span className="text-[10px] text-zinc-500 uppercase ml-2 px-1.5 py-0.2 rounded bg-zinc-800">
-                      {h.asset_class}
-                    </span>
-                  </div>
-                  <div className="text-right font-mono text-zinc-300">
-                    {formatINR(h.statement_value || h.invested_amount)}
-                  </div>
-                </div>
-              ))}
-              {parsedHoldings.length > 8 && (
-                <div className="py-2 text-center text-zinc-500 text-[11px]">
-                  + {parsedHoldings.length - 8} more holdings
-                </div>
-              )}
-            </div>
-
-            {/* Reconcile option */}
-            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer pt-1">
+            {/* Replace Checkbox */}
+            <div className="flex items-center gap-2 pt-1 text-xs">
               <input
                 type="checkbox"
+                id="replace-existing-check"
                 checked={replaceExisting}
                 onChange={(e) => setReplaceExisting(e.target.checked)}
-                className="rounded bg-zinc-950 border-zinc-700 text-emerald-500 focus:ring-emerald-500/20"
+                className="h-4 w-4 rounded accent-primary text-primary"
               />
-              <span>Replace previous imports of this type (Recommended to avoid duplicates)</span>
-            </label>
+              <Label htmlFor="replace-existing-check" className="cursor-pointer">
+                Replace existing holdings from this source (Recommended)
+              </Label>
+            </div>
+          </div>
+        )}
+
+        {/* Supported Formats Info */}
+        {!selectedFile && !isParsing && (
+          <div className="card-well p-3 text-xs space-y-1 text-muted-foreground">
+            <p className="font-bold text-foreground text-[11px] uppercase tracking-wider">Supported Statements</p>
+            <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+              <li><strong>Groww Stocks</strong>: Holdings statement Excel report</li>
+              <li><strong>Groww Mutual Funds</strong>: Portfolio statement Excel report</li>
+              <li><strong>INDmoney US Stocks</strong>: Holdings statement Excel / CSV</li>
+              <li><strong>EPFO Passbook</strong>: Official Member Passbook multi-year PDF</li>
+            </ul>
           </div>
         )}
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-          >
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-border">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isImporting}>
             Cancel
-          </button>
-          <button
-            onClick={handleConfirmImport}
-            disabled={parsedHoldings.length === 0 || isImporting}
-            className="px-5 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/30 transition-all flex items-center gap-2 disabled:opacity-50"
-          >
-            {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            <span>Import & Save to Portfolio</span>
-          </button>
-        </div>
+          </Button>
 
-      </div>
-    </div>
+          <Button
+            size="sm"
+            onClick={handleConfirmImport}
+            disabled={parsedHoldings.length === 0 || isImporting || isParsing}
+            className="font-bold gap-1.5"
+          >
+            {isImporting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Importing...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>Confirm & Import ({parsedHoldings.length})</span>
+              </>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

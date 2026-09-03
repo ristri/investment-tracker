@@ -1,19 +1,154 @@
+@import '@fontsource-variable/figtree';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
+    /* Brand Ladder */
+    --brand-primary: 160 84% 36%;
+    --brand-primary-contrast: 0 0% 100%;
+    --brand-primary-ink: 160 84% 30%;
+
+    --brand-secondary: 178 80% 38%;
+    --brand-secondary-contrast: 0 0% 100%;
+    --brand-secondary-ink: 178 80% 30%;
+
+    --brand-tertiary: 245 75% 60%;
+    --brand-tertiary-contrast: 0 0% 100%;
+    --brand-tertiary-ink: 245 75% 42%;
+
+    --brand-quaternary: 38 92% 48%;
+    --brand-quaternary-contrast: 0 0% 100%;
+    --brand-quaternary-ink: 38 92% 32%;
+
+    /* Radix / Semantic tokens */
+    --background: 240 20% 98%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: var(--brand-primary);
+    --primary-foreground: var(--brand-primary-contrast);
+    --secondary: 240 10% 95%;
+    --secondary-foreground: 240 10% 14%;
+    --muted: 240 10% 94%;
+    --muted-foreground: 240 5% 45%;
+    --accent: 240 10% 92%;
+    --accent-foreground: 240 10% 14%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 10% 89%;
+    --input: 240 10% 89%;
+    --ring: var(--brand-primary);
+    --radius: 0.75rem;
+
+    /* Chrome Surface tokens */
+    --surface: 240 20% 98%;
+    --surface-card: 0 0% 100%;
+    --surface-border: 240 10% 89%;
+
+    /* Soft elevation in light mode */
+    --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 10px 24px -14px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark {
+    /* Brand Ladder in Dark Mode */
+    --brand-primary: 156 75% 48%;
+    --brand-primary-contrast: 165 80% 8%;
+    --brand-primary-ink: var(--brand-primary);
+
+    --brand-secondary: 178 80% 48%;
+    --brand-secondary-contrast: 180 80% 8%;
+    --brand-secondary-ink: var(--brand-secondary);
+
+    --brand-tertiary: 245 80% 68%;
+    --brand-tertiary-contrast: 245 80% 10%;
+    --brand-tertiary-ink: var(--brand-tertiary);
+
+    --brand-quaternary: 38 92% 54%;
+    --brand-quaternary-contrast: 38 92% 10%;
+    --brand-quaternary-ink: var(--brand-quaternary);
+
+    /* Radix / Semantic tokens */
+    --background: 240 10% 4%;
     --foreground: 0 0% 98%;
-  }
+    --card: 240 10% 6.5%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 7%;
+    --popover-foreground: 0 0% 98%;
+    --secondary: 240 10% 11%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 10% 11%;
+    --muted-foreground: 240 5% 62%;
+    --accent: 240 10% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 10% 13%;
+    --input: 240 10% 13%;
 
+    /* Chrome Surface tokens */
+    --surface: 240 10% 4.5%;
+    --surface-card: 240 10% 6.5%;
+    --surface-border: 240 10% 13%;
+
+    --shadow-card: none;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
   body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
   }
-
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.02em;
+  }
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  /* Reusable card surface */
+  .card-surface {
+    @apply rounded-card border border-surface-border bg-surface-card;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Nested well inside cards */
+  .card-well {
+    @apply rounded-tile border border-surface-border/70 bg-background/50;
+  }
+  .dark .card-well {
+    @apply bg-foreground/[0.03] border-foreground/[0.06];
+  }
+
+  .brand-mark {
+    background-color: hsl(var(--brand-primary));
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  /* Tabular numbers for financial metrics */
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -22,16 +157,23 @@
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: rgba(24, 24, 27, 0.5);
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: rgba(63, 63, 70, 0.6);
+  background: hsl(var(--surface-border));
   border-radius: 9999px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(113, 113, 122, 0.8);
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Mobile input zoom prevention (WCAG friendly 16px min size) */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+    min-height: 40px;
+  }
 }

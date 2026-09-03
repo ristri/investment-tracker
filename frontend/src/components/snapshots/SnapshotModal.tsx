@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
-import { Camera, X, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
+import { Camera, Loader2, Sparkles } from 'lucide-react';
 import { useSnapshots } from '../../hooks/useSnapshots';
 import { useHoldings } from '../../hooks/useHoldings';
 import { formatINR, formatPercent, formatLocalDate } from '@investment-tracker/shared';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 interface SnapshotModalProps {
   isOpen: boolean;
@@ -17,8 +27,6 @@ export function SnapshotModal({ isOpen, onClose }: SnapshotModalProps) {
   const [title, setTitle] = useState(defaultTitle);
   const [notes, setNotes] = useState('');
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -28,121 +36,131 @@ export function SnapshotModal({ isOpen, onClose }: SnapshotModalProps) {
         snapshot_date: new Date().toISOString(),
       });
       onClose();
-    } catch {
-      // Handled by hook
-    }
+    } catch {}
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md p-0 sm:p-4 overflow-y-auto">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl my-0 sm:my-8 max-h-[90vh] overflow-y-auto">
-        
+    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg p-5 sm:p-6 space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-tile bg-brand-quaternary/15 text-brand-quaternary-ink border border-brand-quaternary/20 shrink-0">
               <Camera className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-white">Capture Portfolio Snapshot</h3>
-              <p className="text-xs text-zinc-400">Save a point-in-time record of your net worth to database</p>
+              <DialogTitle>Capture Portfolio Milestone</DialogTitle>
+              <DialogDescription>
+                Save a permanent checkpoint of your current net worth to compare your future growth.
+              </DialogDescription>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Snapshot Summary Preview */}
         {summary && (
-          <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-3">
+          <div className="card-well p-4 rounded-card space-y-3 tnum">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Snapshot Valuation</span>
-              <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Current Valuation
+              </span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
                 {summary.holdingCount} Active Assets
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <span className="text-[10px] uppercase text-zinc-500">Total Net Worth</span>
-                <p className="text-xl font-extrabold text-white font-mono">{formatINR(summary.totalNetWorth)}</p>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                  Total Net Worth
+                </span>
+                <p className="text-xl font-extrabold text-foreground">{formatINR(summary.totalNetWorth)}</p>
               </div>
-              <div>
-                <span className="text-[10px] uppercase text-zinc-500">Total Gain</span>
-                <p className={`text-xl font-extrabold font-mono ${summary.totalGain >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {formatINR(summary.totalGain)} ({formatPercent(summary.totalGainPercent)})
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                  Unrealized Gain
+                </span>
+                <p className={cn('text-xl font-extrabold', summary.totalGain >= 0 ? 'text-emerald-500' : 'text-destructive')}>
+                  {summary.totalGain >= 0 ? '+' : ''}{formatINR(summary.totalGain)} ({formatPercent(summary.totalGainPercent)})
                 </p>
               </div>
             </div>
 
-            {/* Micro Breakdown */}
-            <div className="pt-2 border-t border-zinc-800/60 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-zinc-400">
+            {/* Asset Breakdown Chips */}
+            <div className="pt-2 border-t border-surface-border/60 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground">
               <div>
-                <span className="text-zinc-500">Stocks:</span> {formatINR(summary.assetClassBreakdown.stock.current, true)}
+                <span className="text-foreground font-semibold">Stocks:</span> {formatINR(summary.assetClassBreakdown.stock.current, true)}
               </div>
               <div>
-                <span className="text-zinc-500">MF:</span> {formatINR(summary.assetClassBreakdown.mutual_fund.current, true)}
+                <span className="text-foreground font-semibold">MF:</span> {formatINR(summary.assetClassBreakdown.mutual_fund.current, true)}
               </div>
               <div>
-                <span className="text-zinc-500">Gold/SGB:</span> {formatINR(summary.assetClassBreakdown.sgb.current, true)}
+                <span className="text-foreground font-semibold">Gold:</span> {formatINR(summary.assetClassBreakdown.sgb.current, true)}
               </div>
               <div>
-                <span className="text-zinc-500">EPF/PPF/FD:</span> {formatINR(summary.assetClassBreakdown.epf.current + summary.assetClassBreakdown.ppf.current + summary.assetClassBreakdown.fd.current, true)}
+                <span className="text-foreground font-semibold">Fixed:</span> {formatINR(summary.assetClassBreakdown.epf.current + summary.assetClassBreakdown.ppf.current + summary.assetClassBreakdown.fd.current, true)}
               </div>
             </div>
           </div>
         )}
 
         {/* Input Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Snapshot Title / Milestone</label>
+            <Label className="mb-1.5">Milestone Checkpoint Title</Label>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
-              placeholder="e.g. End of August 2026 Portfolio Review"
+              className="w-full bg-muted/60 border border-surface-border rounded-tile px-3.5 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+              placeholder="e.g. Q3 2026 Bonus & Portfolio Review"
             />
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Notes / Rationale (Optional)</label>
+            <Label className="mb-1.5">Notes / Context (Optional)</Label>
             <textarea
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
-              placeholder="e.g. Added bonus investment into Small Cap MF & SGB..."
+              className="w-full bg-muted/60 border border-surface-border rounded-tile px-3.5 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+              placeholder="e.g. Added monthly SIPs into Index Funds and topped up SGB..."
             />
           </div>
 
           {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
-            <button
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-surface-border">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              disabled={isTakingSnapshot}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              size="sm"
               disabled={isTakingSnapshot}
-              className="px-5 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-900/30 transition-all flex items-center gap-2 disabled:opacity-50"
+              className="font-bold gap-1.5"
             >
-              {isTakingSnapshot ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-              <span>Save Snapshot</span>
-            </button>
+              {isTakingSnapshot ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Saving Checkpoint...</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="h-3.5 w-3.5" />
+                  <span>Save Milestone</span>
+                </>
+              )}
+            </Button>
           </div>
         </form>
-
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

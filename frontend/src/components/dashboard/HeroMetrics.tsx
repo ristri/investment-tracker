@@ -1,13 +1,15 @@
 import React from 'react';
-import { PortfolioSummary, formatINR, formatPercent } from '@investment-tracker/shared';
-import { TrendingUp, TrendingDown, Wallet, PiggyBank } from 'lucide-react';
+import { PortfolioSummary, formatINR, formatPercent, getHoldingLiveValue, Holding } from '@investment-tracker/shared';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, Sparkles, ShieldCheck } from 'lucide-react';
+import { Panel, StatBlock, HighlightPanel, IconTile, Tone } from '@/components/ui/panel';
 
 interface HeroMetricsProps {
   summary?: PortfolioSummary;
+  holdings?: Holding[];
   isPrivacyMode?: boolean;
 }
 
-export function HeroMetrics({ summary, isPrivacyMode = false }: HeroMetricsProps) {
+export function HeroMetrics({ summary, holdings = [], isPrivacyMode = false }: HeroMetricsProps) {
   if (!summary) return null;
 
   const isProfit = summary.totalGain >= 0;
@@ -17,80 +19,86 @@ export function HeroMetrics({ summary, isPrivacyMode = false }: HeroMetricsProps
     return formatINR(val, compact);
   };
 
+  // Find top performer holding
+  const topPerformer = holdings.length > 0
+    ? [...holdings].sort((a, b) => {
+        const valA = getHoldingLiveValue(a).pnl;
+        const valB = getHoldingLiveValue(b).pnl;
+        return valB - valA;
+      })[0]
+    : null;
+
+  const topPerformerData = topPerformer ? getHoldingLiveValue(topPerformer) : null;
+
   return (
-    <div className="space-y-4">
-      {/* 3 Executive Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        
-        {/* Card 1: Total Net Worth */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800/80 p-5 sm:p-6 shadow-xl transition-all hover:border-zinc-700">
-          <div className="absolute top-0 right-0 h-32 w-32 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="flex items-center justify-between text-zinc-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Total Net Worth</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
-              <Wallet className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-mono">
-              {formatVal(summary.totalNetWorth)}
-            </div>
-            <div className="flex items-center gap-1.5 text-xs flex-wrap">
-              <span className="text-zinc-400 font-medium">{summary.holdingCount} Active Assets</span>
-              {summary.marketFreshnessInfo && (
-                <span
-                  className="text-zinc-400 font-mono text-[11px] flex items-center gap-1"
-                  title={`Live Market Rates updated: ${summary.marketFreshnessInfo.formattedExact} (${summary.marketFreshnessInfo.sourceLabel})`}
-                >
-                  • <span className={`h-1.5 w-1.5 rounded-full ${summary.marketFreshnessInfo.staleness === 'fresh' ? 'bg-emerald-400 animate-pulse' : summary.marketFreshnessInfo.staleness === 'moderate' ? 'bg-amber-400' : 'bg-zinc-500'}`} />
-                  <span className="text-zinc-300">Rates: {summary.marketFreshnessInfo.relativeTime}</span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Total Invested */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800/80 p-5 sm:p-6 shadow-xl transition-all hover:border-zinc-700">
-          <div className="absolute top-0 right-0 h-32 w-32 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="flex items-center justify-between text-zinc-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Total Invested</span>
-            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-sm">
-              <PiggyBank className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-2xl sm:text-3xl font-extrabold text-zinc-200 tracking-tight font-mono">
-              {formatVal(summary.totalInvested)}
-            </div>
-            <div className="text-xs text-zinc-400 font-medium">
-              Invested Capital Baseline
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Total Profit / Loss */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800/80 p-5 sm:p-6 shadow-xl transition-all hover:border-zinc-700">
-          <div className={`absolute top-0 right-0 h-32 w-32 ${isProfit ? 'bg-emerald-500/10' : 'bg-rose-500/10'} rounded-full blur-3xl pointer-events-none`} />
-          <div className="flex items-center justify-between text-zinc-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Total Returns / P&L</span>
-            <div className={`p-2 rounded-xl border shadow-sm ${isProfit ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-              {isProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-            </div>
-          </div>
-          <div className="space-y-1">
-            <div className={`text-2xl sm:text-3xl font-extrabold tracking-tight font-mono ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {formatVal(summary.totalGain)}
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-semibold">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-lg ${isProfit ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-                {formatPercent(summary.totalGainPercent)} All-Time
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* 1. Total Net Worth */}
+      <StatBlock
+        label="Total Net Worth"
+        value={formatVal(summary.totalNetWorth)}
+        icon={Wallet}
+        tone="primary"
+        tintValue={true}
+        hint={
+          <span className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-semibold text-foreground">{summary.holdingCount} Active Assets</span>
+            {summary.marketFreshnessInfo && (
+              <span className="text-muted-foreground text-[10px]">
+                • Rates: {summary.marketFreshnessInfo.relativeTime}
               </span>
-            </div>
-          </div>
-        </div>
+            )}
+          </span>
+        }
+      />
 
-      </div>
+      {/* 2. Total Invested Capital */}
+      <StatBlock
+        label="Invested Capital"
+        value={formatVal(summary.totalInvested)}
+        icon={PiggyBank}
+        tone="neutral"
+        hint="Original cost basis baseline"
+      />
+
+      {/* 3. Total Returns / P&L */}
+      <StatBlock
+        label="Total Returns (P&L)"
+        value={formatVal(summary.totalGain)}
+        icon={isProfit ? TrendingUp : TrendingDown}
+        tone={isProfit ? 'primary' : 'danger'}
+        tintValue={true}
+        hint={
+          <span className="inline-flex items-center gap-1 font-bold text-xs">
+            <span className={isProfit ? 'text-brand-primary-ink' : 'text-destructive'}>
+              {formatPercent(summary.totalGainPercent)}
+            </span>
+            <span className="text-muted-foreground font-normal">All-Time</span>
+          </span>
+        }
+      />
+
+      {/* 4. Top Performer or Macro Health */}
+      {topPerformer && topPerformerData && topPerformerData.pnl > 0 ? (
+        <HighlightPanel
+          accent="primary"
+          title="Top Performer"
+          badge={formatPercent(topPerformerData.pnlPercent)}
+          stat={isPrivacyMode ? '₹ ••••••' : `+${formatINR(topPerformerData.pnl, true)}`}
+          footer={
+            <span className="truncate block font-semibold">
+              {topPerformer.name} ({topPerformer.symbol || topPerformer.asset_class.toUpperCase()})
+            </span>
+          }
+        />
+      ) : (
+        <HighlightPanel
+          accent="secondary"
+          title="Macro Split"
+          badge={`${summary.macroBreakdown.equity.percentage.toFixed(0)}% Eq`}
+          stat={`${summary.macroBreakdown.equity.percentage.toFixed(0)}% / ${summary.macroBreakdown.debt.percentage.toFixed(0)}% / ${summary.macroBreakdown.gold.percentage.toFixed(0)}%`}
+          footer="Equity • Debt • Gold Balance"
+        />
+      )}
     </div>
   );
 }

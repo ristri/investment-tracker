@@ -1,21 +1,30 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   LayoutDashboard,
-  Coins,
-  Camera,
+  Layers,
+  BarChart3,
+  Target,
   Plus,
   UploadCloud,
-  Layers,
-  LogOut,
+  Camera,
+  X,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { TabType } from './Sidebar';
+import { cn } from '@/lib/utils';
 
 interface MobileNavProps {
-  activeTab: 'dashboard' | 'holdings' | 'snapshots';
-  setActiveTab: (tab: 'dashboard' | 'holdings' | 'snapshots') => void;
+  activeTab: TabType;
+  setActiveTab: (tab: TabType) => void;
   onOpenAddModal: () => void;
   onOpenImportModal: () => void;
   onOpenSnapshotModal: () => void;
-  onLogout?: () => void;
   holdingCount: number;
   snapshotCount: number;
 }
@@ -26,173 +35,153 @@ export function MobileNav({
   onOpenAddModal,
   onOpenImportModal,
   onOpenSnapshotModal,
-  onLogout,
   holdingCount,
   snapshotCount,
 }: MobileNavProps) {
-  const [showQuickActions, setShowQuickActions] = React.useState(false);
+  const [isQuickActionOpen, setIsQuickActionOpen] = useState(false);
 
   return (
     <>
-      {/* Quick Action Bottom Sheet Backdrop */}
-      {showQuickActions && (
-        <div
-          onClick={() => setShowQuickActions(false)}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden animate-fade-in"
-        />
-      )}
+      {/* Quick Action Drawer powered by Radix Dialog */}
+      <Dialog open={isQuickActionOpen} onOpenChange={setIsQuickActionOpen}>
+        <DialogContent className="sm:max-w-sm rounded-t-card sm:rounded-card p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Quick Actions</DialogTitle>
+            <DialogDescription>Add to your portfolio or capture a milestone</DialogDescription>
+          </DialogHeader>
 
-      {/* Quick Action Drawer Menu (Mobile) */}
-      {showQuickActions && (
-        <div className="fixed bottom-20 left-4 right-4 z-50 bg-zinc-900 border border-zinc-800 rounded-3xl p-4 shadow-2xl space-y-2 md:hidden animate-in slide-in-from-bottom-5">
-          <div className="text-center pb-2 border-b border-zinc-800">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Quick Actions</span>
+          <div className="space-y-2 pt-2">
+            <button
+              onClick={() => {
+                setIsQuickActionOpen(false);
+                onOpenImportModal();
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-tile bg-muted/50 hover:bg-muted text-left transition-colors border border-surface-border/60"
+            >
+              <div className="p-2 rounded-xl bg-brand-secondary/15 text-brand-secondary-ink border border-brand-secondary/20">
+                <UploadCloud className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Import Statement</p>
+                <p className="text-[10px] text-muted-foreground">Upload Groww Excel or EPFO Passbook</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setIsQuickActionOpen(false);
+                onOpenAddModal();
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-tile bg-muted/50 hover:bg-muted text-left transition-colors border border-surface-border/60"
+            >
+              <div className="p-2 rounded-xl bg-primary/15 text-primary border border-primary/20">
+                <Plus className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Add Manual Asset</p>
+                <p className="text-[10px] text-muted-foreground">Add SGB, PPF, FD, or Custom Equities</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setIsQuickActionOpen(false);
+                onOpenSnapshotModal();
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-tile bg-muted/50 hover:bg-muted text-left transition-colors border border-surface-border/60"
+            >
+              <div className="p-2 rounded-xl bg-brand-quaternary/15 text-brand-quaternary-ink border border-brand-quaternary/20">
+                <Camera className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Milestone Snapshot</p>
+                <p className="text-[10px] text-muted-foreground">Record current net worth milestone</p>
+              </div>
+            </button>
           </div>
+        </DialogContent>
+      </Dialog>
 
-          <button
-            onClick={() => {
-              setShowQuickActions(false);
-              onOpenImportModal();
-            }}
-            className="w-full flex items-center gap-3 p-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800/80 text-left transition-all border border-zinc-800"
-          >
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <UploadCloud className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white">Import Statement</p>
-              <p className="text-[10px] text-zinc-400">Upload Groww Excel or EPFO Passbook PDF</p>
-            </div>
-          </button>
+      {/* Symmetrical 5-slot Mobile Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-surface-border bg-surface/95 px-1 py-1.5 backdrop-blur-xl md:hidden">
+        {/* Slot 1: Dashboard */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('dashboard')}
+          className={cn(
+            'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-tile px-1 py-1 text-[10px] font-semibold transition-colors',
+            activeTab === 'dashboard' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <LayoutDashboard className="h-4 w-4" />
+          <span>Dashboard</span>
+        </button>
 
-          <button
-            onClick={() => {
-              setShowQuickActions(false);
-              onOpenAddModal();
-            }}
-            className="w-full flex items-center gap-3 p-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800/80 text-left transition-all border border-zinc-800"
-          >
-            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
-              <Plus className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white">Add Manual Asset</p>
-              <p className="text-[10px] text-zinc-400">Add Bank SGB, PPF, or Fixed Deposit</p>
-            </div>
-          </button>
+        {/* Slot 2: Holdings */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('holdings')}
+          className={cn(
+            'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-tile px-1 py-1 text-[10px] font-semibold transition-colors relative',
+            activeTab === 'holdings' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <div className="relative">
+            <Layers className="h-4 w-4" />
+            {holdingCount > 0 && (
+              <span className="absolute -top-1 -right-2 h-3 min-w-3 px-0.5 rounded-full bg-primary text-[8px] font-bold text-primary-foreground flex items-center justify-center">
+                {holdingCount}
+              </span>
+            )}
+          </div>
+          <span>Holdings</span>
+        </button>
 
+        {/* Slot 3: Center FAB (+) */}
+        <div className="flex flex-1 items-center justify-center">
           <button
-            onClick={() => {
-              setShowQuickActions(false);
-              onOpenSnapshotModal();
-            }}
-            className="w-full flex items-center gap-3 p-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800/80 text-left transition-all border border-zinc-800"
-          >
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-              <Camera className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white">Take Net Worth Snapshot</p>
-              <p className="text-[10px] text-zinc-400">Capture current valuation milestone</p>
-            </div>
-          </button>
-        </div>
-      )}
-
-      {/* Symmetrical 5-Slot Bottom Navigation Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800/90 px-2 py-2 md:hidden shadow-2xl">
-        <div className="grid grid-cols-5 items-center justify-items-center max-w-md mx-auto">
-          
-          {/* Slot 1: Dashboard */}
-          <button
-            onClick={() => {
-              setActiveTab('dashboard');
-              setShowQuickActions(false);
-            }}
-            className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all w-full ${
-              activeTab === 'dashboard'
-                ? 'text-emerald-400 font-bold'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <LayoutDashboard className="h-5 w-5" />
-            <span className="text-[10px] truncate">Dashboard</span>
-          </button>
-
-          {/* Slot 2: Holdings / Assets */}
-          <button
-            onClick={() => {
-              setActiveTab('holdings');
-              setShowQuickActions(false);
-            }}
-            className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all relative w-full ${
-              activeTab === 'holdings'
-                ? 'text-emerald-400 font-bold'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <div className="relative">
-              <Layers className="h-5 w-5" />
-              {holdingCount > 0 && (
-                <span className="absolute -top-1 -right-2.5 h-3.5 min-w-3.5 px-1 rounded-full bg-emerald-500 text-[8px] font-bold text-black flex items-center justify-center">
-                  {holdingCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] truncate">Assets</span>
-          </button>
-
-          {/* Slot 3: True Center Action FAB (+) */}
-          <button
-            onClick={() => setShowQuickActions(!showQuickActions)}
-            className={`h-11 w-11 rounded-2xl flex items-center justify-center shadow-lg transition-all transform active:scale-95 ${
-              showQuickActions
-                ? 'bg-zinc-800 text-white rotate-45 border border-zinc-700'
-                : 'bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-emerald-900/40'
-            }`}
+            type="button"
+            onClick={() => setIsQuickActionOpen(true)}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
             aria-label="Quick Actions"
           >
-            <Plus className="h-6 w-6 stroke-[2.5]" />
+            <Plus className="h-5 w-5" />
           </button>
-
-          {/* Slot 4: Snapshots / History */}
-          <button
-            onClick={() => {
-              setActiveTab('snapshots');
-              setShowQuickActions(false);
-            }}
-            className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all relative w-full ${
-              activeTab === 'snapshots'
-                ? 'text-emerald-400 font-bold'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <div className="relative">
-              <Camera className="h-5 w-5" />
-              {snapshotCount > 0 && (
-                <span className="absolute -top-1 -right-2.5 h-3.5 min-w-3.5 px-1 rounded-full bg-zinc-700 text-[8px] font-bold text-zinc-200 flex items-center justify-center border border-zinc-600">
-                  {snapshotCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] truncate">History</span>
-          </button>
-
-          {/* Slot 5: Logout */}
-          <button
-            onClick={() => {
-              setShowQuickActions(false);
-              if (onLogout) onLogout();
-            }}
-            className="flex flex-col items-center gap-1 py-1 px-2 rounded-xl text-zinc-400 hover:text-rose-400 transition-all w-full"
-            title="Sign Out"
-          >
-            <LogOut className="h-5 w-5" />
-            <span className="text-[10px] truncate">Sign Out</span>
-          </button>
-
         </div>
-      </div>
+
+        {/* Slot 4: Portfolio Intelligence */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('analytics')}
+          className={cn(
+            'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-tile px-1 py-1 text-[10px] font-semibold transition-colors',
+            activeTab === 'analytics' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <BarChart3 className="h-4 w-4" />
+          <span>Insights</span>
+        </button>
+
+        {/* Slot 5: Milestones */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('snapshots')}
+          className={cn(
+            'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-tile px-1 py-1 text-[10px] font-semibold transition-colors relative',
+            activeTab === 'snapshots' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <div className="relative">
+            <Target className="h-4 w-4" />
+            {snapshotCount > 0 && (
+              <span className="absolute -top-1 -right-2 h-3 min-w-3 px-0.5 rounded-full bg-brand-quaternary text-[8px] font-bold text-white flex items-center justify-center">
+                {snapshotCount}
+              </span>
+            )}
+          </div>
+          <span>Milestones</span>
+        </button>
+      </nav>
     </>
   );
 }
